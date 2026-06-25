@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "codemap"
+version = "0.1.0"
+description = "Structural Intelligence Layer — extract & visualize a codebase's business mainlines as a subway map."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    # MCP client to talk to the Codebase-Memory server
+    "mcp>=1.0.0",
+    # Unified LLM access (Minimax + Dashscope are OpenAI-compatible)
+    "openai>=1.30.0",
+    # Config from .env
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+codemap-m1 = "codemap.milestones.m1_connectivity:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/codemap"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

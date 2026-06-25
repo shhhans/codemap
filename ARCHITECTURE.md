@@ -1,0 +1,143 @@
+# 结构化智能层 (Structural Intelligence Layer) — 架构设计
+
+> 本文档是项目的权威设计说明。代码实现应以此为契约；当实现与本文档冲突时，
+> 先更新本文档再改代码。
+
+## 1. 核心世界观
+
+面向 Vibe Coding 的轻量级本地 2C 可视化工具。彻底摒弃传统"文件树"和"静态调用图
+（毛线团）"，采用 **"代码加工厂与物质流 (The Code Factory & Material Flow)"** 世界观。
+
+- **核心目标**：提取并可视化代码仓库中的"业务主线 (Material Flow Mainline)"，并在
+  主线交汇处识别架构设计的健康状态（**职责叠加** vs. **职责污染**）。
+- **视觉隐喻**：地铁图 (Subway Map)。主线为地铁线，加工节点为站点，交叉点为换乘枢纽。
+- **验证目标**：Dogfooding——让本工具解析自身代码库，画出自身的业务主线。
+
+## 2. 技术栈
+
+| 层 | 选型 |
+|----|------|
+| 底层图谱引擎 | `Codebase-Memory`（C / Tree-Sitter / SQLite，单二进制，零依赖） |
+| 交互协议 | MCP (Model Context Protocol)，暴露 `trace_call_path`、`get_code_snippet` 等 |
+| LLM 推理端 | Minimax API + Dashscope API，经 `openai` 库统一集成 |
+| 后端 / Agent | Python + 极简无锁并发调度器（`asyncio`） |
+| 前端 / 可视化 | HTML5 + D3.js / ECharts 拓扑/地铁图渲染 |
+
+## 3. 核心模块
+
+系统分为三个核心模块：**Coordinator (调度官)**、**Worker Agent (追踪工)**、
+**Global Blackboard (全局黑板)**。
+
+### 3.1 Global Blackboard（全局黑板 / 共享记忆）
+
+轻量级内存或本地 SQLite 数据库，存储所有并发 Agent 的探索轨迹，并在其中计算交叉点。
+Schema 见 [`src/codemap/blackboard/schema.sql`](./src/codemap/blackboard/schema.sql)。
+
+- **`nodes`**：被保留的代码节点（id, name, type, file_path, snippet）。
+- **`traces`**：`agent_id`, `node_id`, `flow_type`（Auth / Payment …）的"打卡"记录。
+  同时兼作 DFS 的 **visited set**（去重 + 防环）。
+- **`intersections`**：视图/触发器。当同一 `node_id` 拥有 >1 种 `flow_type` 时自动生成
+  交叉点记录，待评审 Agent 定性。
+
+### 3.2 Coordinator（调度官）
+
+- **自然语言解析 (Seeding)**：接收用户输入，用 LLM + MCP 工具（`search_graph` /
+  `search_code`）找出真正的起点（Source / Seed）。
+- **任务派发与 Fork 控制**：当某 Worker 报告"数据流在此处分叉，且不属于基础设施防爆墙"
+  时，Coordinator 实例化新 Worker 并分配新的滑动窗口追踪任务。
+- **并发护栏**（防止指数爆炸）：最大深度 `MAX_DEPTH`、最大并发 Worker 数
+  `MAX_WORKERS`、依赖 `traces` 去重的 visited 检查。
+
+### 3.3 Worker Agent（并发虚拟污点追踪器）
+
+- 执行"基于 LLM 的虚拟污点追踪 (Virtual Taint Tracking)"。
+- 拥有极小的滑动窗口上下文，仅关注当前追踪的"特定原材料 (Token)"。
+- 共享一个庞大的 System Prompt（充分利用服务端 Prompt Caching 降低成本）。
+- 每个剪枝判定附带 **confidence**：低置信分支降级标记而非直接剪掉，避免主线被错误截断。
+
+## 4. 核心工作流 (Agent Workflow)
+
+**步骤一 · 按需探路 (On-demand Exploration)**
+1. Worker 从 Coordinator 拿到当前节点 `Node A` 与目标追踪物 `Token`。
+2. 经 MCP 调用 `trace_call_path` 获取 `Node A` 下游 1 层相邻节点 `[Node B, Node C]`。
+3. 经 MCP 调用 `get_code_snippet` 提取 A/B/C 的核心源码签名。
+
+**步骤二 · 语义剪枝与打卡 (Semantic Pruning & Logging)**
+- **防爆墙 (Barrier) 判定**：若 `Node B` 是 `logger.info`、内置框架方法或"已声明的完美
+  黑盒"，标记为 Sink/Barrier，停止该方向探索。
+- **物质传递判定**：若 `Node C` 未接收/处理 `Token`（仅控制流附带调用），直接剪枝。
+- **打卡上报**：对真正继承物质流的有效节点，调用 `log_trace(node_id, flow_type)` 打卡。
+
+**步骤三 · 深度优先滑动与分叉 (DFS & Forking)**
+- 仅一条有效路径：滑动窗口前移，继续深入。
+- 多条有效路径（真实业务数据分流）：Worker 挂起，请求 Coordinator Fork。
+
+**步骤四 · 交叉点定性 (Intersection Health Check)**
+当黑板发现 `Node X` 被 `Auth_Worker` 与 `Billing_Worker` 同时打卡：
+1. Coordinator 唤醒评审 Agent。
+2. 检查 `Node X` 在 `Auth` 主线中的状态：
+   - 若是 **沉淀点 (Sink / Stable State)**（如 `getCurrentUser()`）→ **[健康交叉]**。
+   - 若是 **中间加工环节**（如 `parseJWT()`）→ **[危险交叉 / 职责污染]**。
+
+## 5. 数据结构契约 (Visualization Schema)
+
+Agent 最终输出一张用于渲染"地铁图"的 JSON 地图。权威 JSON Schema 见
+[`docs/subway_map.schema.json`](./docs/subway_map.schema.json)，示例：
+
+```json
+{
+  "mainlines": [
+    { "id": "line_auth", "name": "Auth Mainline", "color": "#FF0000",
+      "nodes": ["node_1", "node_2", "node_3"] }
+  ],
+  "nodes": [
+    { "id": "node_2", "name": "AuthMiddleware.verify()", "type": "processor",
+      "file_path": "src/auth/middleware.ts", "snippet": "..." }
+  ],
+  "intersections": [
+    { "node_id": "node_x", "type": "dangerous",
+      "description": "Billing 主线在此处摄取了 Auth 主线的中间处理结果（Token 解析），属于职责污染。建议重构为依赖稳定状态。",
+      "involved_lines": ["line_auth", "line_billing"] }
+  ]
+}
+```
+
+## 6. LLM Prompt 架构
+
+**静态前置区 (System Prompt — 享受 Cache，占 ~90%)**
+1. 角色设定：基于代码加工厂世界观的虚拟污点追踪引擎 (Virtual Taint Tracker)。
+2. 核心概念定义：Source / Sink / Barrier（第三方库或基础设施必须拦截）/ 中间结果 / 稳定状态。
+3. 判定规则：严格过滤"仅有控制流但无实际数据（原材料）依赖"的调用节点。
+
+**动态后置区 (Sliding Window — 产生 Token 消耗，每次追加在末尾)**
+```
+[当前追踪主线]: Auth (目标物质: authorization header / user_id)
+[当前节点]: src/auth/controller.ts:login()
+[下游候选节点及签名]:
+  1. util/logger.ts:log()
+  2. src/auth/service.ts:verifyToken()
+  3. src/db/query.ts:getUser()
+[请分析数据流并返回 JSON 指令]:
+  - 哪些是防爆墙？ 哪些是无效噪音？ 哪些需要继续追踪 (Fork)？
+```
+
+## 7. 开发里程碑
+
+- **M1 基础设施连通**：Python 启动并经 MCP 连上 `Codebase-Memory`，成功调用
+  `trace_call_path` / `get_code_snippet`，**并把真实工具 schema 固化为契约**
+  （`docs/mcp_tools_contract.json`，后续三个里程碑均依赖它）。
+- **M2 单线 DFS 追踪**：实现 System Prompt + 动态滑动窗口；硬编码 Seed，命令行跑通
+  单一主线语义剪枝并打印过滤后路径。
+- **M3 全局黑板与并发分叉**：引入 SQLite 黑板 + `log_trace`；实现分叉 Fork 与多 Agent
+  并发；构造含"危险交叉"的假代码测试自动报警。
+- **M4 界面可视化与自我解析**：导出 SQLite → JSON 契约 → 极简 HTML 地铁图；解析自身
+  Python 源码完成狗粮验证。
+
+## 8. 已知风险与设计决策
+
+| 风险 | 缓解 |
+|------|------|
+| MCP 工具真实 schema 未知，上层全依赖它 | **M1 交付物即工具契约固化**，先 dump 再编码 |
+| LLM 污点判定会误判（漏判断线 / 误判污染） | 每次判定带 confidence；低置信降级标记不直接剪 |
+| DFS + Fork 指数爆炸 / 环形调用死循环 | `MAX_DEPTH` / `MAX_WORKERS` + `traces` 去重 visited |
+| Minimax / Dashscope 的 Prompt Cache 行为与 Anthropic 不同，成本模型可能崩 | 早期独立验证两家 cache 命中是否真省钱 |

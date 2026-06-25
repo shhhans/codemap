@@ -1,0 +1,72 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://codemap/docs/subway_map.schema.json",
+  "title": "Subway Map",
+  "description": "Visualization contract emitted by the agent layer for the subway-map renderer.",
+  "type": "object",
+  "required": ["mainlines", "nodes", "intersections"],
+  "additionalProperties": false,
+  "properties": {
+    "mainlines": {
+      "type": "array",
+      "description": "Business mainlines (Material Flow). One per subway line.",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "color", "nodes"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "examples": ["line_auth"] },
+          "name": { "type": "string", "examples": ["Auth Mainline"] },
+          "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+          "nodes": {
+            "type": "array",
+            "description": "Ordered node ids along the line (DFS order).",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "description": "Retained code nodes (stations) referenced by mainlines/intersections.",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "type"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string", "examples": ["AuthMiddleware.verify()"] },
+          "type": {
+            "type": "string",
+            "enum": ["source", "processor", "sink", "barrier"]
+          },
+          "file_path": { "type": "string" },
+          "snippet": { "type": "string" }
+        }
+      }
+    },
+    "intersections": {
+      "type": "array",
+      "description": "Nodes where >1 mainline converge (transfer hubs), with a health verdict.",
+      "items": {
+        "type": "object",
+        "required": ["node_id", "type", "involved_lines"],
+        "additionalProperties": false,
+        "properties": {
+          "node_id": { "type": "string" },
+          "type": {
+            "type": "string",
+            "enum": ["healthy", "dangerous"],
+            "description": "healthy = node is a stable sink for the crossing line; dangerous = intermediate processing step (responsibility pollution)."
+          },
+          "description": { "type": "string" },
+          "involved_lines": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 2
+          }
+        }
+      }
+    }
+  }
+}
