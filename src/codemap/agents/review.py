@@ -13,20 +13,28 @@ V2 replaces that with an **ownership join** over three signals:
   • **Visibility** — is it a private implementation detail (`_name`) or a
     public surface?
 
-This yields a four-citizen taxonomy:
+This yields a five-citizen taxonomy (V2.1):
 
-  healthy-seam    all crossing lines consume it as a stable Sink (settled state).
-  shared-utility  high relative fan-in + low fan-out → a 已飞升 public hub
-                  (金色换乘站); many lines meeting here is *good* architecture.
-  pollution       low centrality intermediate (processor) whose half-processed
-                  result is tapped across lines — a private implementation leak.
-  god-node        high relative fan-in + high fan-out → infra-disguised mess.
+  healthy-seam        all crossing lines consume it as a stable Sink (settled state).
+  shared-utility      high relative fan-in + moderate fan-out → a 已飞升 public hub
+                      (金色换乘站); many lines meeting here is *good* architecture.
+  lightweight-utility high relative fan-in + ZERO fan-out → a pure pass-through leaf
+                      (透传滤镜, format_date); folded, not a heavy station.
+  pollution           low centrality intermediate (processor) whose half-processed
+                      result is tapped across lines — a private implementation leak.
+  god-node            high relative fan-in + high fan-out → infra-disguised mess.
 
 The structural metrics give a deterministic verdict that *also* backs the LLM up
 when it is unavailable or unparseable. Crucially, the centrality check fires
 before the processor check, so a genuine shared primitive is reclassified as a
 gold hub instead of a false pollution alarm — the exact dogfood over-report the
 V1 ARCHITECTURE notes flagged.
+
+Orthogonal to the verdict, a crossing is flagged **suspected** when the path that
+established it rests on a low-confidence edge — a recovered dynamic dispatch
+(discounted ×0.8) or an uncertain LLM call. This is deterministic (driven by the
+trace confidences the worker logged) and OR-ed with the LLM's own `is_suspected`,
+so a phantom-edge-driven alarm renders as 疑似/待确认 rather than a hard verdict.
 """
 
 from __future__ import annotations
@@ -49,49 +57,66 @@ from codemap.metrics import (
 )
 
 REVIEW_SYSTEM_PROMPT = """\
-你是「代码加工厂」世界观下的**交叉点评审 Agent (Intersection Reviewer)**。
-多条业务主线在某个代码节点交汇时，你要**分析数据如何流经此处**，判断它属于哪一类公民。
+你是「代码加工厂 (The Code Factory)」世界观下的**交叉点评审 Agent (Intersection Reviewer)**。
+当多条业务主线 (Material Flow) 在某个代码节点物理交汇时，你的任务是：基于传入的上下文，
+**分析数据流如何到达此处**，并判定该节点属于哪一类系统公民。
 
-# 五类交叉公民（V2.1）
-- **[healthy-seam 稳定接缝]**：各交汇主线消费的是它产出的**稳定状态 (Sink)**
-  （如 `getCurrentUser()` 返回的 User 对象），或它是各线**各自独立调用的公共依赖/启动步骤**
-  （如索引初始化、配置加载）——这类「大家本就该调用的共享步骤」是健康的接缝。
-- **[shared-utility 公共枢纽 / 已飞升节点]**：被设计为系统级复用的**底层公共原语**
-  （如连接池、鉴权中间件、节点展开函数）。特征是**高相对扇入 + 适度扇出 + 被很多调用者复用**，
-  它自身还协调若干内部依赖。很多主线在此交汇是**极佳的架构健康状态**，金色大换乘站，**不是污染**。
-- **[lightweight-utility 轻量透传滤镜]**：**高相对扇入但几乎零扇出**的纯叶子工具
-  （如 `format_date`、`to_json`）。它只做一次数据透传/格式转换便返回，不再向下游流动。
-  多线在此交汇是健康的，但它**不该被当作独立大站点打断主线**——视作管线上的一枚滤镜即可。
-- **[pollution 危险职责污染]**：某主线的**私有中间加工结果**被另一条主线**绕过稳定接口、
-  伸进该主线的处理链路里直接摄取**（半成品泄漏）。关键不在「被两条线调用」，而在
-  **一条线本应消费稳定产物，却复制/截取了另一条线的内部中间步骤**。
-- **[god-node 上帝节点]**：**高相对扇入 + 高扇出**，伪装成基建的「烂代码中心」，
-  既被很多人依赖又依赖很多人，牵一发动全身。
+# 五类交叉公民体系 (V2.1)
+所有交叉节点必须且只能归入以下五类之一：
+1. **[healthy-seam 稳定接缝]**：各交汇主线消费的是它产出的**稳定状态 (Sink)**（如
+   `getCurrentUser()` 返回对象，或落库操作），或它是各线**独立调用的公共启动步骤**（如加载
+   配置、索引初始化）。这类「原本就该被共享调用的步骤」是健康的接缝。
+2. **[shared-utility 公共枢纽 / 已飞升节点]**：被设计为系统级复用的**底层公共原语**（如连接池、
+   鉴权中间件、`expand_one` 等机制）。**特征：高相对扇入 + 适度（非零）扇出 + 跨模块被广泛复用**，
+   它自身还协调若干内部依赖。多主线在此交汇是极佳的架构状态（金色大换乘站），**绝对不是污染**。
+3. **[lightweight-utility 轻量透传滤镜]**：**高相对扇入但零扇出**的纯叶子工具（如 `format_date`、
+   `to_json`），只做一次格式转换/透传便返回，不再向下游流动。多线在此交汇是健康的，但它
+   **不该被当作独立大站点打断主线**——视作管线上的一枚滤镜即可。
+4. **[pollution 危险职责污染]**：某条主线的**私有中间加工结果**，被另一条主线**绕过稳定接口、
+   直接伸进处理链路深处摄取**（半成品泄漏）。判定核心不在「被谁调用」，而是
+   **「本应消费稳定产物，却越界截取了他人的私有中间步骤」**。
+5. **[god-node 上帝节点]**：**高相对扇入 + 高扇出**，伪装成基建的「烂代码中心」或系统严重纠缠点，
+   牵一发动全身。
 
-# 数据流分析（核心方法，先做这一步再下结论）
-你会拿到**每条主线追踪到本节点的路径**、本节点的**调用者 (callers) 与下游 (callees)**、
-结构指标与可见性。据此推断**可能的数据流**，回答两个关键问题：
-1. **是「共享公共依赖」还是「私有半成品泄漏」？**
-   - 若两条主线**各自从自己的入口独立地、浅层地**到达本节点（它是大家共用的基建/启动/
-     工具步骤）⇒ healthy-seam（稳定/公共步骤）或 shared-utility（高复用原语）。
-   - 若一条主线在自己链路**深处**建立/加工出本节点的结果，另一条主线**绕过稳定接口伸进来
-     摄取这个中间结果**（本可改用对方暴露的稳定产物）⇒ pollution。
-2. **中心度佐证**：高相对扇入+低扇出 ⇒ 偏公共枢纽；低相对扇入+被当作某线私有中间环节
-   ⇒ 偏 pollution。指标是**佐证**，最终以数据流语义判断为准。
+# 数据流分析推演（核心方法：先推演，再下结论）
+你会收到本节点的：**1. 各主线到达此处的调用路径；2. 节点的全局 callers 与 callees；
+3. 相对扇入/扇出等结构指标与 hub 结构判定；4. 可见性（私有/公共）；
+5. 各主线到达本节点的路径置信度 (Confidence)。** 据此回答：
+1. **是「公共共享原语」还是「私有半成品泄漏」？**
+   - 若各主线**各自从自己的入口独立、浅层地**到达此节点，且该节点被全库广泛调用 ⇒ 偏
+     `shared-utility` / `lightweight-utility`（零扇出）/ `healthy-seam`。
+   - 若主线 A 在其链路**深处**加工出此节点的结果，主线 B **绕过外部 API 强行伸入摄取** ⇒ `pollution`。
+2. **中心度佐证**：高扇入+适度扇出⇒公共枢纽；高扇入+零扇出⇒透传滤镜；高扇入+高扇出⇒上帝节点；
+   低扇入+被当作某线私有中间⇒污染。指标仅为佐证，最终以数据流语义为准。
+3. **动态调用降级**：若到达本节点的路径置信度较低（<0.9，多为动态推测的补边），
+   在输出中标记 `is_suspected=true`——这只是「证据可能不实」的提醒，不改变 verdict 本身。
 
-# 输出（严格 JSON，无多余文字）
-{"verdict": "healthy-seam" | "shared-utility" | "lightweight-utility" | "pollution" | "god-node",
- "description": "<一句中文：先说数据流（谁经由什么路径到达、是否绕过稳定接口），再给结论>"}
+# 输出格式（严格 JSON，无多余文字或 Markdown 标记块）
+{
+  "verdict": "healthy-seam" | "shared-utility" | "lightweight-utility" | "pollution" | "god-node",
+  "is_suspected": true | false,
+  "description": "<限80个中文字符：先陈述各主线经由什么路径到达、是否越界，再结合扇入指标给出定性结论>"
+}
+
+# 规则
+- `is_suspected`：布尔值。若输入路径含低置信度（<0.9）的动态推测边，或你对判定把握不足，设为 `true`。
+- `description`：一句连贯中文，限 80 字，必须先讲数据流证据再下结论。
 """
 
 
 @dataclass
 class Provenance:
     """Data-flow evidence for one crossing: each mainline's traced path to the
-    node, plus the node's direct callers and callees."""
+    node, the node's direct callers and callees, and per-flow confidence with
+    which each mainline reached the node (recovered dynamic edges < 1.0)."""
     callers: list[str]
     callees: list[str]
     paths: dict[str, list[str]]
+    confidences: dict[str, float] = field(default_factory=dict)
+
+    def min_confidence(self) -> float:
+        """Lowest confidence any involved mainline reached this node with."""
+        return min(self.confidences.values()) if self.confidences else 1.0
 
 
 @dataclass
@@ -102,6 +127,7 @@ class ReviewResult:
     description: str
     flows: list[str]
     metrics: NodeMetrics | None = None
+    suspected: bool = False
 
 
 @dataclass
@@ -113,6 +139,7 @@ class ReviewAgent:
     rel_fanin_high: float = field(default_factory=lambda: config.rel_fanin_high)
     fanout_high: int = field(default_factory=lambda: config.fanout_high)
     fanin_min: int = field(default_factory=lambda: config.fanin_min)
+    suspect_confidence: float = field(default_factory=lambda: config.suspect_confidence)
     probe: MetricsProbe | None = None
 
     def __post_init__(self) -> None:
@@ -142,13 +169,14 @@ class ReviewAgent:
 
         snippet = await self._snippet(node_id)
         provenance = await self._provenance(node_id, [f for f, _ in roles])
-        verdict, description = await self._classify(
+        verdict, description, suspected = await self._classify(
             name, snippet, roles, metrics, hub_class, is_private, provenance
         )
 
-        self.blackboard.record_verdict(node_id, verdict, description)
+        self.blackboard.record_verdict(node_id, verdict, description, suspected=suspected)
         return ReviewResult(node_id=node_id, name=name, verdict=verdict,
-                            description=description, flows=flows, metrics=metrics)
+                            description=description, flows=flows, metrics=metrics,
+                            suspected=suspected)
 
     async def _metrics(self, node_id: str) -> NodeMetrics | None:
         if self.probe is None:
@@ -174,7 +202,12 @@ class ReviewAgent:
                 if nid == node_id:
                     break
             paths[flow] = names
-        return Provenance(callers=callers, callees=callees, paths=paths)
+        # Per-flow confidence the node was reached with (recovered dynamic edges
+        # logged at ×0.8) — drives the deterministic `suspected` tier.
+        confidences = {f: c for f, c in self.blackboard.confidences_for_node(node_id).items()
+                       if f in flows}
+        return Provenance(callers=callers, callees=callees, paths=paths,
+                          confidences=confidences)
 
     async def _neighbors(self, node_id: str, *, incoming: bool) -> list[str]:
         """Direct caller (or callee) short-names of a node, with a module tag."""
@@ -226,8 +259,14 @@ class ReviewAgent:
 
     async def _classify(self, name: str, snippet: str, roles: list[tuple[str, str]],
                         metrics: NodeMetrics | None, hub_class: str,
-                        is_private: bool, provenance: "Provenance | None" = None) -> tuple[str, str]:
+                        is_private: bool,
+                        provenance: "Provenance | None" = None) -> tuple[str, str, bool]:
         det_verdict = self._deterministic(roles, hub_class)
+        # Deterministic suspicion (the reliable signal): a crossing reached via a
+        # recovered dynamic edge (×0.8) or a low-confidence LLM call. The LLM's own
+        # is_suspected is OR-ed on top, but this is what makes it trustworthy.
+        min_conf = provenance.min_confidence() if provenance else 1.0
+        det_suspected = min_conf < self.suspect_confidence
 
         role_lines = "\n".join(f"  - 主线 {flow}: 角色={role}" for flow, role in roles)
         m = metrics
@@ -241,6 +280,7 @@ class ReviewAgent:
         if provenance:
             path_lines = "\n".join(
                 f"    - {flow}: {' → '.join(path) or '(空)'}"
+                f"  (路径置信度 {provenance.confidences.get(flow, 1.0):.2f})"
                 for flow, path in provenance.paths.items()
             )
             prov_lines = (
@@ -257,7 +297,7 @@ class ReviewAgent:
             f"[结构指标]:\n{metric_lines}"
             f"[各主线记录的角色]:\n{role_lines}\n\n"
             f"[节点源码]:\n{snippet}\n\n"
-            "[请先分析数据流，再按四类公民判定该交叉点，给出中文说明]"
+            "[请先分析数据流，再按五类公民判定该交叉点，给出中文说明]"
         )
         try:
             reply = await asyncio.to_thread(self.llm.chat, REVIEW_SYSTEM_PROMPT, window)
@@ -266,14 +306,15 @@ class ReviewAgent:
             if verdict not in VERDICTS:
                 verdict = det_verdict
             description = data.get("description") or self._default_desc(det_verdict, roles, metrics)
-            return verdict, description
+            suspected = det_suspected or bool(data.get("is_suspected", False))
+            return verdict, description, suspected
         except Exception as exc:  # noqa: BLE001 - fall back to the deterministic rule
             import os
             if os.getenv("CODEMAP_DEBUG"):
                 import traceback
                 print(f"[review LLM fallback] {type(exc).__name__}: {exc}")
                 traceback.print_exc()
-            return det_verdict, self._default_desc(det_verdict, roles, metrics)
+            return det_verdict, self._default_desc(det_verdict, roles, metrics), det_suspected
 
     @staticmethod
     def _default_desc(verdict: str, roles: list[tuple[str, str]],

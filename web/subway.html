@@ -38,9 +38,12 @@ const TYPE_LABEL = { source:"源头 Source", processor:"加工站 Processor", si
 // interchange — green seam / gold heavy hub / teal lightweight pass-through
 // filter (folded, drawn small, never a heavy station); two unhealthy ones draw
 // an off-mainline red connector (职责污染 / 上帝节点).
-const GOLD = "#f5c518", GREEN = "#28c76f", RED = "#ff4d4f", TEAL = "#34d3c0";
+const GOLD = "#f5c518", GREEN = "#28c76f", RED = "#ff4d4f", TEAL = "#34d3c0", AMBER = "#ffa940";
 const isHealthyCrossing = v => v === "healthy-seam" || v === "shared-utility" || v === "lightweight-utility";
 const isDanger = v => v === "pollution" || v === "god-node";
+// A "suspected" crossing rests on a low-confidence edge (recovered dynamic
+// dispatch / uncertain LLM): the third tier — drawn amber & faint with a ?,
+// so a phantom-edge alarm reads as 疑似/待确认 rather than a hard verdict.
 const interchangeColor = v => v === "shared-utility" ? GOLD : v === "lightweight-utility" ? TEAL : GREEN;
 const VERDICT_BADGE = {
   "healthy-seam":       { text: "✓ 健康接缝", color: GREEN },
@@ -60,8 +63,10 @@ function el(name, attrs = {}, parent = null, text = null) {
 
 function render(data) {
   const nodeById = Object.fromEntries(data.nodes.map(n => [n.id, n]));
-  const verdict = {}, vdesc = {};
-  data.intersections.forEach(i => { verdict[i.node_id] = i.type; vdesc[i.node_id] = i.description; });
+  const verdict = {}, vdesc = {}, suspect = {};
+  data.intersections.forEach(i => {
+    verdict[i.node_id] = i.type; vdesc[i.node_id] = i.description; suspect[i.node_id] = !!i.suspected;
+  });
 
   // node -> set of line indices it appears on
   const nodeLines = {};
@@ -112,16 +117,20 @@ function render(data) {
     const lis = [...nodeLines[nid]];
     if (lis.length > 1 && isDanger(verdict[nid])) {
       const ps = lis.map(li => perLine[li + "|" + nid]);
-      const label = verdict[nid] === "god-node"
+      const susp = suspect[nid];
+      const stroke = susp ? AMBER : RED;
+      const base = verdict[nid] === "god-node"
         ? "☠ 上帝节点：高扇入高扇出"
         : "⚠ 职责污染：跨线摄取中间结果";
+      const label = susp ? "疑似 · " + base + "（低置信补边，待确认）" : base;
       for (let k = 0; k < ps.length - 1; k++) {
         const a = ps[k], b = ps[k + 1], mx = (a.x + b.x) / 2;
-        // a gently bowed dashed link so it reads as "outside" the rails
+        // a gently bowed dashed link so it reads as "outside" the rails; a
+        // suspected crossing is fainter (amber, lower opacity) than a hard one.
         el("path", { d: `M ${a.x} ${a.y} Q ${mx} ${(a.y + b.y) / 2 - 34} ${b.x} ${b.y}`,
-                     fill: "none", stroke: RED, "stroke-width": 3.5,
-                     "stroke-dasharray": "10 6", opacity: 0.95 }, svg);
-        el("text", { x: mx, y: (a.y + b.y) / 2 - 42, class: "badge", fill: RED,
+                     fill: "none", stroke, "stroke-width": 3.5,
+                     "stroke-dasharray": susp ? "4 7" : "10 6", opacity: susp ? 0.6 : 0.95 }, svg);
+        el("text", { x: mx, y: (a.y + b.y) / 2 - 42, class: "badge", fill: stroke,
                      "text-anchor": "middle" }, svg, label);
       }
     }
@@ -138,8 +147,8 @@ function render(data) {
       drawn.add(key);
       const p = posFor(li, nid);
       const node = nodeById[nid] || { name: nid.split(".").pop(), type: "processor" };
-      drawStation(svg, p, node, ln.color, verdict[nid], isMerged);
-      drawLabel(svg, p, node, nid, li, data.mainlines.length, isMerged, verdict[nid]);
+      drawStation(svg, p, node, ln.color, verdict[nid], isMerged, suspect[nid]);
+      drawLabel(svg, p, node, nid, li, data.mainlines.length, isMerged, verdict[nid], suspect[nid]);
     });
   });
 
@@ -153,7 +162,7 @@ function render(data) {
   buildLegend();
 }
 
-function drawStation(svg, p, node, color, verdict, isMerged) {
+function drawStation(svg, p, node, color, verdict, isMerged, suspected) {
   if (isMerged) {
     // A lightweight pass-through util (透传滤镜) is folded: drawn as a small teal
     // diamond "filter" inline, never a heavy interchange — it shouldn't read as a
@@ -180,12 +189,18 @@ function drawStation(svg, p, node, color, verdict, isMerged) {
     el("circle", { cx: p.x, cy: p.y, r: 12, fill: "#171a21", stroke: color, "stroke-width": 5 }, svg);
   }
   if (isDanger(verdict)) {
-    el("circle", { cx: p.x, cy: p.y, r: 22, fill: "none", stroke: RED,
-                   "stroke-width": 3, "stroke-dasharray": "4 3" }, svg);
+    // suspected danger → amber dotted ring + "?" badge; confirmed → solid red ring
+    el("circle", { cx: p.x, cy: p.y, r: 22, fill: "none", stroke: suspected ? AMBER : RED,
+                   "stroke-width": 3, "stroke-dasharray": suspected ? "2 4" : "4 3",
+                   opacity: suspected ? 0.8 : 1 }, svg);
+    if (suspected) {
+      el("text", { x: p.x + 20, y: p.y - 14, class: "badge", fill: AMBER,
+                   "text-anchor": "middle" }, svg, "?");
+    }
   }
 }
 
-function drawLabel(svg, p, node, nid, li, nLines, isMerged, verdict) {
+function drawLabel(svg, p, node, nid, li, nLines, isMerged, verdict, suspected) {
   // line 0 labels go left, the rightmost line goes right; merged stations are
   // labelled below-centre in the gap so nothing collides.
   let x, anchor, y0 = p.y - 3;
@@ -203,8 +218,9 @@ function drawLabel(svg, p, node, nid, li, nLines, isMerged, verdict) {
   const badge = VERDICT_BADGE[verdict];
   if (badge) {
     const dy = isHealthyCrossing(verdict) && isMerged ? 16 : 47;
-    el("text", { x, y: y0 + dy, class: "badge", "text-anchor": anchor, fill: badge.color },
-       svg, badge.text);
+    const text = suspected ? "疑似 · " + badge.text : badge.text;
+    el("text", { x, y: y0 + dy, class: "badge", "text-anchor": anchor,
+                 fill: suspected ? AMBER : badge.color }, svg, text);
   }
 }
 
@@ -220,6 +236,7 @@ function buildLegend() {
     ["◇ 轻量透传滤镜 (青色小菱形)", "swatch sq", TEAL, null],
     ["⚠ 职责污染 (红环·主线外红虚线)", "swatch", RED, null],
     ["☠ 上帝节点 · 高扇入高扇出 (红)", "swatch", RED, null],
+    ["疑似 · 待确认 (琥珀虚环·低置信补边)", "swatch", AMBER, null],
   ];
   for (const [label, cls, color, ring] of items) {
     const s = document.createElement("span");

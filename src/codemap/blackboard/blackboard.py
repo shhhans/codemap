@@ -126,18 +126,19 @@ class Blackboard:
             for r in rows
         ]
 
-    def record_verdict(self, node_id: str, verdict: str, description: str = "") -> None:
+    def record_verdict(self, node_id: str, verdict: str, description: str = "",
+                       suspected: bool = False) -> None:
         if verdict not in VERDICTS:
             raise ValueError(f"verdict must be one of {sorted(VERDICTS)}, got {verdict!r}")
         self._conn.execute(
             """
-            INSERT INTO intersection_verdicts (node_id, verdict, description)
-            VALUES (?, ?, ?)
+            INSERT INTO intersection_verdicts (node_id, verdict, suspected, description)
+            VALUES (?, ?, ?, ?)
             ON CONFLICT(node_id) DO UPDATE SET
-                verdict = excluded.verdict, description = excluded.description,
-                reviewed_at = unixepoch('subsec')
+                verdict = excluded.verdict, suspected = excluded.suspected,
+                description = excluded.description, reviewed_at = unixepoch('subsec')
             """,
-            (node_id, verdict, description),
+            (node_id, verdict, int(suspected), description),
         )
 
     # ── Mainlines (presentation metadata) ──────────────────────────────────
@@ -164,6 +165,19 @@ class Blackboard:
             (node_id,),
         ).fetchall()
         return [(r["flow_type"], r["node_role"]) for r in rows]
+
+    def confidences_for_node(self, node_id: str) -> dict[str, float]:
+        """Per-flow confidence with which each mainline recorded this node.
+
+        A node reached via a recovered dynamic-dispatch edge was logged at ×0.8
+        (and an uncertain LLM call lower still), so a value < 1.0 here means the
+        edge that created this crossing is shaky — the signal that drives the
+        `suspected` tier in review."""
+        rows = self._conn.execute(
+            "SELECT flow_type, confidence FROM traces WHERE node_id = ? ORDER BY flow_type",
+            (node_id,),
+        ).fetchall()
+        return {r["flow_type"]: r["confidence"] for r in rows}
 
     def nodes_for_flow(self, flow_type: str) -> list[str]:
         rows = self._conn.execute(

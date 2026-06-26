@@ -41,15 +41,16 @@ class StubLLM:
     """Returns a fixed four-state verdict, so we can prove the LLM's answer is
     actually used (not silently swallowed onto the deterministic backstop)."""
 
-    def __init__(self, verdict: str, description: str = "llm verdict") -> None:
-        self._v, self._d = verdict, description
+    def __init__(self, verdict: str, description: str = "llm verdict",
+                 is_suspected: bool = False) -> None:
+        self._v, self._d, self._s = verdict, description, is_suspected
 
     def chat(self, system: str, window: str) -> Any:
-        v, d = self._v, self._d
+        v, d, s = self._v, self._d, self._s
 
         class _Reply:
             def json(self_inner) -> dict:
-                return {"verdict": v, "description": d}
+                return {"verdict": v, "description": d, "is_suspected": s}
 
         return _Reply()
 
@@ -83,11 +84,17 @@ def board(tmp_path: Path) -> Blackboard:
     crossing("m.fmt", "format_date", "processor", "processor")
     # Stable seam: a sink for both.
     crossing("m.get_user", "get_current_user", "sink", "sink")
+    # Suspected: billing reached this node via a recovered dynamic edge (×0.8),
+    # so the crossing rests on a low-confidence edge — verdict pollution, but flagged.
+    bb.upsert_node(Node(id="m.dyn", name="dynamic_hop", type="processor"))
+    bb.log_trace(Trace("auth", "m.dyn", "auth", node_role="processor", depth=2))
+    bb.log_trace(Trace("billing", "m.dyn", "billing", node_role="processor",
+                       confidence=0.72, depth=1))
     yield bb
     bb.close()
 
 
-def _verdicts(board: Blackboard) -> dict[str, str]:
+def _results(board: Blackboard, llm: Any = None) -> dict[str, Any]:
     metrics = {
         # low relative fan-in → ordinary → pollution
         "m.parse_jwt": NodeMetrics("m.parse_jwt", fan_in=2, fan_out=1, system_size=300),
@@ -99,13 +106,18 @@ def _verdicts(board: Blackboard) -> dict[str, str]:
         "m.fmt": NodeMetrics("m.fmt", fan_in=40, fan_out=0, system_size=30),
         # all-sink → healthy-seam regardless of metrics
         "m.get_user": NodeMetrics("m.get_user", fan_in=5, fan_out=0, system_size=300),
+        # low centrality → pollution; reached at conf 0.72 → suspected
+        "m.dyn": NodeMetrics("m.dyn", fan_in=2, fan_out=1, system_size=300),
     }
     agent = ReviewAgent(
-        mcp=FakeMCP(), llm=FallbackLLM(), blackboard=board, project="p",
+        mcp=FakeMCP(), llm=llm or FallbackLLM(), blackboard=board, project="p",
         probe=FakeProbe(metrics),
     )
-    results = asyncio.run(agent.review_all())
-    return {r.node_id: r.verdict for r in results}
+    return {r.node_id: r for r in asyncio.run(agent.review_all())}
+
+
+def _verdicts(board: Blackboard) -> dict[str, str]:
+    return {nid: r.verdict for nid, r in _results(board).items()}
 
 
 def test_shared_utility_not_flagged_as_pollution(board: Blackboard) -> None:
@@ -145,11 +157,34 @@ def test_llm_verdict_overrides_deterministic(board: Blackboard) -> None:
     assert res["m.parse_jwt"].description == "llm verdict"   # LLM prose, not _default_desc
 
 
+def test_low_confidence_path_is_suspected(board: Blackboard) -> None:
+    # billing reached m.dyn at confidence 0.72 (< 0.9 floor) → deterministically
+    # suspected, even though the LLM is offline. The verdict itself is unchanged.
+    res = _results(board)
+    assert res["m.dyn"].verdict == "pollution"
+    assert res["m.dyn"].suspected is True
+
+
+def test_full_confidence_path_not_suspected(board: Blackboard) -> None:
+    # parse_jwt's crossing was logged at confidence 1.0 → not suspected.
+    res = _results(board)
+    assert res["m.parse_jwt"].suspected is False
+
+
+def test_llm_can_raise_suspicion_on_a_confident_path(board: Blackboard) -> None:
+    # Even a full-confidence crossing is flagged if the LLM itself is unsure.
+    res = _results(board, llm=StubLLM("pollution", is_suspected=True))
+    assert res["m.parse_jwt"].suspected is True
+
+
 def test_verdicts_persist_to_blackboard(board: Blackboard) -> None:
     _verdicts(board)
     from codemap.export import export_subway_map
 
     data = export_subway_map(board.db_path)
-    by_node = {i["node_id"]: i["type"] for i in data["intersections"]}
-    assert by_node["m.expand"] == "shared-utility"
-    assert by_node["m.parse_jwt"] == "pollution"
+    by_node = {i["node_id"]: i for i in data["intersections"]}
+    assert by_node["m.expand"]["type"] == "shared-utility"
+    assert by_node["m.parse_jwt"]["type"] == "pollution"
+    # suspected flag survives to the export contract the renderer consumes
+    assert by_node["m.dyn"]["suspected"] is True
+    assert by_node["m.parse_jwt"]["suspected"] is False

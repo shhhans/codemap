@@ -84,6 +84,14 @@ class Config:
     fanin_min: int = field(
         default_factory=lambda: int(os.getenv("CODEMAP_FANIN_MIN", "4"))
     )
+    # A crossing whose path to the node was established with confidence below this
+    # floor (recovered dynamic edges are discounted ×0.8; low-confidence LLM calls
+    # drop further) is flagged `suspected` — a third tier between confirmed and
+    # clean, so a phantom-edge-driven alarm reads as 疑似/待确认 rather than a hard
+    # verdict. See ReviewAgent._classify and subway.html suspected rendering.
+    suspect_confidence: float = field(
+        default_factory=lambda: float(os.getenv("CODEMAP_SUSPECT_CONFIDENCE", "0.9"))
+    )
 
     def llm(self, provider: str | None = None) -> LLMConfig:
         """Resolve the LLM endpoint config for `provider` (defaults to llm_provider)."""

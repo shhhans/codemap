@@ -56,7 +56,7 @@ def export_subway_map(db_path: str | Path) -> dict[str, Any]:
     intersections: list[dict[str, Any]] = []
     for x in conn.execute("SELECT node_id, flow_types FROM intersections"):
         verdict = conn.execute(
-            "SELECT verdict, description FROM intersection_verdicts WHERE node_id = ?",
+            "SELECT verdict, suspected, description FROM intersection_verdicts WHERE node_id = ?",
             (x["node_id"],),
         ).fetchone()
         involved = [flow_to_line.get(f, f) for f in (x["flow_types"] or "").split(",") if f]
@@ -64,6 +64,7 @@ def export_subway_map(db_path: str | Path) -> dict[str, Any]:
             {
                 "node_id": x["node_id"],
                 "type": verdict["verdict"] if verdict else "pollution",
+                "suspected": bool(verdict["suspected"]) if verdict else False,
                 "description": verdict["description"] if verdict else "未定性的交叉点（评审 Agent 尚未运行）",
                 "involved_lines": involved,
             }

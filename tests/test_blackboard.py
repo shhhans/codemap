@@ -69,6 +69,16 @@ def test_record_verdict_round_trips(bb: Blackboard) -> None:
         bb.record_verdict("parseJWT", "bogus")
 
 
+def test_confidences_for_node_reports_per_flow(bb: Blackboard) -> None:
+    # A node reached via a recovered dynamic edge is logged below 1.0; the review
+    # agent reads this to flag the crossing `suspected`.
+    bb.upsert_node(Node(id="hub", name="hub()"))
+    bb.log_trace(Trace(agent_id="auth", node_id="hub", flow_type="auth", confidence=1.0))
+    bb.log_trace(Trace(agent_id="billing", node_id="hub", flow_type="billing", confidence=0.72))
+    confs = bb.confidences_for_node("hub")
+    assert confs == {"auth": 1.0, "billing": 0.72}
+
+
 def test_nodes_for_flow_orders_by_depth(bb: Blackboard) -> None:
     for nid, depth in [("c", 2), ("a", 0), ("b", 1)]:
         bb.upsert_node(Node(id=nid, name=f"{nid}()"))

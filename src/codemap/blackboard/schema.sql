@@ -67,6 +67,10 @@ CREATE TABLE IF NOT EXISTS intersection_verdicts (
     -- V2.1 five-citizen taxonomy: healthy-seam | shared-utility |
     -- lightweight-utility (透传滤镜) | pollution | god-node
     verdict     TEXT NOT NULL,
+    -- Confidence tier: 1 when the path to this crossing rests on a low-confidence
+    -- edge (a recovered dynamic dispatch, or an uncertain LLM call), so the map
+    -- can draw it as 疑似/待确认 rather than a hard alarm. Orthogonal to verdict.
+    suspected   INTEGER NOT NULL DEFAULT 0,
     description TEXT,
     reviewed_at REAL NOT NULL DEFAULT (unixepoch('subsec'))
 );
