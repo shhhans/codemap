@@ -58,6 +58,13 @@ class Config:
     max_depth: int = field(default_factory=lambda: int(os.getenv("CODEMAP_MAX_DEPTH", "12")))
     max_workers: int = field(default_factory=lambda: int(os.getenv("CODEMAP_MAX_WORKERS", "8")))
     llm_provider: str = field(default_factory=lambda: os.getenv("CODEMAP_LLM_PROVIDER", "minimax"))
+    # Per-call completion budget. A reasoning model spends a large <think> block
+    # before its JSON, and a high-fan-out node yields a long decisions array, so
+    # too small a cap truncates the answer and silently empties the verdict. 8192
+    # gives headroom on big dogfood nodes; raise further for very wide entries.
+    llm_max_tokens: int = field(
+        default_factory=lambda: int(os.getenv("CODEMAP_LLM_MAX_TOKENS", "8192"))
+    )
 
     # ── Intersection ownership thresholds (M2/M3) ──────────────────────────
     # Calibration knobs for the Concordia relative-fan-in classifier. A node

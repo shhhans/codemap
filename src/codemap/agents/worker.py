@@ -369,7 +369,17 @@ class TaintWorker:
         reply = await asyncio.to_thread(self.llm.chat, SYSTEM_PROMPT, window)
         try:
             data = reply.json()
-        except Exception:  # noqa: BLE001 - malformed JSON: treat as all-noise, don't crash
+        except Exception as exc:  # noqa: BLE001 - malformed JSON: treat as all-noise, don't crash
+            # Most often a truncated answer (completion hit max_tokens on a wide,
+            # high-fan-out node). Silent before; gate a diagnostic on CODEMAP_DEBUG
+            # so the empty expansion isn't a mystery (this is what hid the dogfood
+            # _run no-children case until the meter showed completion == the cap).
+            import os
+            if os.getenv("CODEMAP_DEBUG"):
+                ct = (reply.usage or {}).get("completion_tokens")
+                print(f"[worker _classify unparsable] {current.rsplit('.',1)[-1]}: "
+                      f"{type(exc).__name__} (completion_tokens={ct}, "
+                      f"candidates={len(candidates)})")
             return []
         return data.get("decisions", []) if isinstance(data, dict) else []
 
