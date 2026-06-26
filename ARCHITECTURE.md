@@ -30,6 +30,20 @@
 | 后端 / Agent | Python + 极简无锁并发调度器（`asyncio`） |
 | 前端 / 可视化 | HTML5 + D3.js / ECharts 拓扑/地铁图渲染 |
 
+## 2.1 世界观 2.0：五类代码公民（V2）
+
+任何图谱节点在被 Agent 接触时，归入以下五类公民之一：
+
+- **Source（涌现点）**：原材料进入主线的起点。
+- **Processor（私有中间环节）**：专属于某条主线的业务加工逻辑（半成品）。
+- **Sink（稳定沉淀点）**：数据产生副作用或完成持久化的合理终点。
+- **Barrier / Dual（外部存根 / 防爆墙）**：第三方库不展开源码，视作黑盒。
+  **无出边 → Sink（阻断）**；**有出边 → Dual（数据透传转换器，继续追踪）**。
+  判别逻辑见 [`src/codemap/filtering.py`](./src/codemap/filtering.py)（M1）。
+- **Shared Utility（公共枢纽 / 已飞升节点）**：被设计为系统级复用的底层公共原语
+  （如幂等校验、节点展开函数）。**高相对扇入 + 低扇出**，多条主线在此交汇是**极佳的
+  架构健康状态**，标记为金色换乘站——这是 V2 用来消除 V1「狗粮过度报警」的关键公民。
+
 ## 3. 核心模块
 
 系统分为三个核心模块：**Coordinator (调度官)**、**Worker Agent (追踪工)**、
@@ -158,10 +172,70 @@ Agent 最终输出一张用于渲染"地铁图"的 JSON 地图。权威 JSON Sch
   被调用名，对图中**唯一同名**的 Function/Method 补一条 `recovered=True` 的低 confidence
   (×0.8) 候选边。补边后 Coordinator→Worker 的换乘骨干得以在自身狗粮图中显现。
 
-> **待改进（狗粮发现）**：当前评审启发式「任一主线视其为 processor 即判 dangerous」会把
-> **设计上就该共享的工具节点**（如 `expand_one`/`_downstream` 这类多驱动复用的核心原语）
-> 误报为职责污染。真正的污染（fixture 的 `parse_jwt`）是「跨线摄取某主线的私有中间结果」，
-> 与「共享公共工具」需进一步区分（例如看节点是否为某主线的私有实现 vs 公共 API）。
+## 7.1 V2 升级里程碑（结构化智能层 2.0）
+
+V2 的核心突破：从纯数据流追踪，升级为带**架构所有权 (Ownership) 判定**的语义分析——
+精准区分「危险的职责污染」与「健康的公共枢纽」。
+
+- **V2-M1 过滤与存根化** ✅：[`src/codemap/filtering.py`](./src/codemap/filtering.py)。两道
+  防爆网把底层库挡在 LLM 的 Context 之外：(1) **全局关系过滤**——共享黑名单
+  `GLOBAL_RELATION_BLACKLIST`（从 `worker._CALL_NOISE` 抽出并扩充）剪掉 builtins / 容器方法；
+  (2) **局部存根化**——`ast` 解析文件 import 得到第三方/标准库模块（含 `as` 别名与
+  `from x import y` 绑定），命中即视作黑盒**严禁展开 AST**，纯靠出入边判 **Sink（无出边）/
+  Dual（有出边，继续追踪）**。存根判别对「图引擎是否索引外部符号」两种情况都成立。
+  接入 `TaintWorker.expand_one`：存根边界绕过 LLM，且**存根判定优先于短名黑名单**
+  （`requests.get` 不会因短名 `get` 被误剪）。
+
+  > **实测校准（v0.8.1 真实图谱）**：用 `query_graph` 实测确认 Codebase-Memory **只索引仓库
+  > 自身符号**——第三方/标准库调用（如 `asyncio.to_thread`）根本不进图（既非节点也非边）。
+  > 故图层的存根分区在本引擎是**良性 no-op**（为其它引擎预留）；存根在本引擎的**真实价值在
+  > 动态补边路径**：源码正则会提取 `np.dot(x)` 的裸名 `dot`，若仓库恰有唯一内部 `dot()` 就会
+  > 补出**幻象边**。修复：(a) import 是**文件级**的（不在函数体里），故按节点 qualified_name 的
+  > **最长前缀**定位其 `Module` 节点、解析该文件源码的 import（按文件缓存）；(b) 用
+  > `externals_only` **剔除项目自身的一方包**（如 `codemap`，它 import 起来像库但解析到内部可追节点），
+  > 只保留真正的外部模块；(c) `stub_call_names` 据此把外部方法裸名排除出补边，内部调用
+  > （如 `build_window`）照常可追。实测 `worker._classify`：外部根=stdlib、`to_thread` 被排除、
+  > `build_window` 仍补回。
+- **V2-M2 相对扇入/出** ✅：[`src/codemap/metrics.py`](./src/codemap/metrics.py)。Concordia
+  无量纲公式 `相对扇入 = Fan-in/(S·ln S)`（S=文件/类数，缺标签时回退总节点数），消除项目
+  规模差异；`classify_hub` 据「相对扇入 × 绝对扇出 × **绝对扇入下限**」给出 SHARED_UTILITY /
+  GOD_NODE / ORDINARY。阈值 `CODEMAP_REL_FANIN_HIGH` / `CODEMAP_FANOUT_HIGH` /
+  `CODEMAP_FANIN_MIN` 可校准。
+
+  > **实测校准（真实 LLM 狗粮发现）**：Concordia 公式在**极小仓库**退化——S≈2 时，只被 2 条
+  > 线调用的节点 `相对扇入≈1.44` 就爆表，导致 fixture 里**故意构造的污染案例 `parse_jwt`
+  > 被镀金成「公共枢纽」**。修复不是调阈值，而是加**绝对扇入下限 `fanin_min`（默认 4）**：
+  > 真正的公共枢纽既要相对中心度高、也要绝对调用面广；只被两条线调用的节点无论仓库多小都不算
+  > 系统级基建。加下限后 `parse_jwt` 正确回落为 `pollution`、`get_current_user`（sink）为
+  > `healthy-seam`。
+- **V2-M3 四态评审** ✅：[`agents/review.py`](./src/codemap/agents/review.py) 升级为**归属权
+  联合判断**，verdict 由两态扩为四态：
+  `healthy-seam` / `shared-utility` / `pollution` / `god-node`。地铁图
+  （[`web/subway.html`](./web/subway.html)）据此渲染：金色枢纽 / 绿色接缝（换乘站合并）vs
+  红色污染 / 上帝节点（主线外红虚线）。
+
+  > **数据流证据 + Agent 主判（真实 LLM 狗粮迭代得出）**：纯结构指标无法区分两类"被两线调用"
+  > 的节点——`parse_jwt`（真污染，billing 绕过稳定接口截取 auth 私有 claims）和
+  > `index_repository`（假污染，两入口各自独立调用的公共启动步骤）在调用图上**长得一样**。
+  > 因此 ReviewAgent 现在给 LLM 喂**数据流证据 (Provenance)**：每条主线**追踪到该节点的路径**
+  > （数据如何抵达）+ 该节点的**callers/callees** + 指标 + 可见性，让 LLM **分析可能的数据流**
+  > 后判定——「两线各自浅层独立到达的公共依赖 → seam/utility」vs「一条线伸进另一条链路截取
+  > 私有半成品 → pollution」。**指标降为佐证，LLM 为主判官**；确定性规则仅在 LLM 不可用时兜底。
+  > 实测两形态均判对（index_repository→healthy-seam、parse_jwt→pollution，且 LLM 能引用
+  > docstring「NOT a stable domain object」佐证）。
+  >
+  > 同时修了两个真实 bug：(1) `VERDICTS` 未从包 `__init__` 重导出，`from codemap.blackboard
+  > import VERDICTS` 静默抛错 → **此前每次评审都回退到确定性兜底、LLM 从未被真正咨询**；
+  > (2) 推理模型 (`MiniMax-M3`) 的 `<think>` 块吃 token，未设 `max_tokens` 会截断 JSON——
+  > 已设 4096 headroom。回归测试见 [`tests/test_review_ownership.py`](./tests/test_review_ownership.py)
+  > （断言 LLM 判定覆盖确定性结果）与 [`tests/test_blackboard.py`](./tests/test_blackboard.py)
+  > （断言 VERDICTS 可从包导入）。
+
+> **已解决（原狗粮发现）**：V1 启发式「任一主线视其为 processor 即判 dangerous」会把
+> **设计上就该共享的工具节点**（如 `expand_one`/`_downstream`）误报为职责污染。V2 用「先看
+> 相对扇入中心度」的归属权判定把它们重归为 `shared-utility`（金色枢纽），而真正的污染
+> （fixture 的 `parse_jwt`，低中心度私有中间结果被跨线摄取）仍判 `pollution`。回归测试见
+> [`tests/test_review_ownership.py`](./tests/test_review_ownership.py)。
 
 ## 8. 已知风险与设计决策
 

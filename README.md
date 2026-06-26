@@ -48,6 +48,17 @@
 | **M3** 黑板与并发分叉 | SQLite 黑板 + `log_trace` + Fork，构造危险交叉并报警 | ✅ 真实 LLM 跑通 |
 | **M4** 可视化与狗粮 | 导出 JSON 契约 → HTML 地铁图（真换乘站 + 污染连接），解析自身源码 | ✅ 完成 |
 
+### V2 升级（结构化智能层 2.0 · 带架构所有权判定）
+
+| Milestone | 目标 | 状态 |
+|-----------|------|------|
+| **V2-M1** 过滤与存根化 | `filtering.py`：全局关系黑名单 + import 解析的第三方存根（Sink/Dual 判别），接入 Worker | ✅ 完成 |
+| **V2-M2** 相对扇入/出 | `metrics.py`：Concordia `Fan-in/(S·ln S)` + 扇出联合判定（公共枢纽 vs 上帝节点） | ✅ 完成 |
+| **V2-M3** 四态评审 | ReviewAgent 归属权联合判断；verdict 升级为 healthy-seam / shared-utility / pollution / god-node，地铁图金/绿/红渲染 | ✅ 完成 |
+
+> V2 核心：从纯数据流追踪升级为带**架构所有权 (Ownership)** 的语义分析，用「相对扇入中心度」
+> 区分**健康的公共枢纽（金色换乘站）**与**危险的职责污染**，消除 V1 狗粮中的过度报警。
+
 ## 快速开始
 
 ```bash

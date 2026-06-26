@@ -122,9 +122,16 @@ def _report(result, blackboard: Blackboard) -> None:
     print("\n═══ Intersections (换乘枢纽) ═══")
     if not result.reviews:
         print("  (none detected)")
+    icons = {
+        "shared-utility": "✦ 公共枢纽 / 已飞升",
+        "healthy-seam": "✓ 健康接缝",
+        "pollution": "⚠ 危险交叉 / 职责污染",
+        "god-node": "☠ 上帝节点 / 高扇入高扇出",
+    }
     for r in result.reviews:
-        icon = "⚠ 危险交叉 / 职责污染" if r.verdict == "dangerous" else "✓ 健康交叉"
-        print(f"\n  {icon}  —  {r.name}()   [{' × '.join(r.flows)}]")
+        icon = icons.get(r.verdict, r.verdict)
+        m = f"   (rel_fan_in={r.metrics.rel_fan_in:.3f}, fan_out={r.metrics.fan_out})" if r.metrics else ""
+        print(f"\n  {icon}  —  {r.name}()   [{' × '.join(r.flows)}]{m}")
         print(f"     {r.description}")
 
 

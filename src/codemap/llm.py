@@ -56,15 +56,22 @@ class LLMClient:
         *,
         temperature: float = 0.1,
         force_json: bool = True,
+        max_tokens: int = 4096,
     ) -> LLMReply:
         """One-shot chat: cached system prompt + dynamic user window → reply.
 
         `temperature` is low by default: taint pruning should be near
         deterministic, not creative.
+
+        `max_tokens` defaults generously because reasoning models (e.g.
+        MiniMax-M3) spend a large `<think>` block *before* the JSON answer — too
+        small a budget truncates the reasoning and starves the JSON, silently
+        forcing every verdict onto the deterministic backstop.
         """
         kwargs: dict[str, Any] = {
             "model": self.cfg.model,
             "temperature": temperature,
+            "max_tokens": max_tokens,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content},

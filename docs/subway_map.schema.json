@@ -56,8 +56,8 @@
           "node_id": { "type": "string" },
           "type": {
             "type": "string",
-            "enum": ["healthy", "dangerous"],
-            "description": "healthy = node is a stable sink for the crossing line; dangerous = intermediate processing step (responsibility pollution)."
+            "enum": ["healthy-seam", "shared-utility", "pollution", "god-node"],
+            "description": "V2 four-citizen verdict. healthy-seam = all lines consume a stable Sink; shared-utility = high relative fan-in + low fan-out public hub (golden interchange); pollution = a low-centrality private intermediate tapped across lines; god-node = high relative fan-in + high fan-out infra-disguised mess."
           },
           "description": { "type": "string" },
           "involved_lines": {

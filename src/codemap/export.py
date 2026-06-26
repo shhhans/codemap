@@ -63,7 +63,7 @@ def export_subway_map(db_path: str | Path) -> dict[str, Any]:
         intersections.append(
             {
                 "node_id": x["node_id"],
-                "type": verdict["verdict"] if verdict else "dangerous",
+                "type": verdict["verdict"] if verdict else "pollution",
                 "description": verdict["description"] if verdict else "未定性的交叉点（评审 Agent 尚未运行）",
                 "involved_lines": involved,
             }
