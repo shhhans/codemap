@@ -21,3 +21,7 @@ venv/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+
+# Generated visualization artifacts (derived from the blackboard)
+web/subway_map.json
+web/subway_map.png

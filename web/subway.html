@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<title>Codemap · 业务主线地铁图</title>
+<style>
+  :root { --bg:#0f1115; --panel:#171a21; --ink:#e8eaed; --muted:#9aa0aa; --rail:#2a2f3a; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font-family:-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif; }
+  header { padding:22px 28px 6px; }
+  header h1 { margin:0; font-size:20px; letter-spacing:.5px; }
+  header p { margin:4px 0 0; color:var(--muted); font-size:13px; }
+  #legend { display:flex; gap:18px; flex-wrap:wrap; padding:10px 28px 18px; color:var(--muted); font-size:12.5px; }
+  #legend span { display:inline-flex; align-items:center; gap:7px; }
+  .swatch { width:14px; height:14px; border-radius:50%; display:inline-block; }
+  .sq { border-radius:3px; }
+  #map { padding:0 16px 32px; }
+  svg text { fill:var(--ink); }
+  .station-name { font-size:14px; font-weight:600; }
+  .station-meta { font-size:11px; }
+  .danger-badge { font-size:11px; font-weight:700; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🚇 业务主线地铁图 <span style="color:var(--muted);font-weight:400">Material Flow Mainline</span></h1>
+  <p id="subtitle">代码加工厂 · 物质流追踪结果</p>
+</header>
+<div id="legend"></div>
+<div id="map"></div>
+
+<script>
+const SVG = "http://www.w3.org/2000/svg";
+const TYPE_LABEL = { source:"源头 Source", processor:"加工站 Processor", sink:"沉淀点 Sink", barrier:"防爆墙 Barrier" };
+
+function el(name, attrs={}, parent=null) {
+  const n = document.createElementNS(SVG, name);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+
+function render(data) {
+  const nodeById = Object.fromEntries(data.nodes.map(n => [n.id, n]));
+  const dangerSet = new Set(data.intersections.filter(i => i.type === "dangerous").map(i => i.node_id));
+  const healthySet = new Set(data.intersections.filter(i => i.type === "healthy").map(i => i.node_id));
+
+  // Layout: each mainline is a vertical column of stations.
+  const topPad = 60, rowH = 96, colW = 360, leftPad = 90, stationX = 46;
+  const maxLen = Math.max(1, ...data.mainlines.map(m => m.nodes.length));
+  const width = leftPad + data.mainlines.length * colW + 120;
+  const height = topPad + maxLen * rowH + 40;
+
+  const svg = el("svg", { width, height, viewBox:`0 0 ${width} ${height}` }, document.getElementById("map"));
+
+  data.mainlines.forEach((line, ci) => {
+    const cx = leftPad + ci * colW + stationX;
+    // line title
+    const t = el("text", { x: cx - 30, y: 36, class:"station-name" }, svg);
+    t.textContent = line.name;
+    el("rect", { x: cx - 34, y: 44, width: 8, height: 8, rx:2, fill: line.color }, svg);
+
+    // the rail
+    if (line.nodes.length > 1) {
+      el("line", { x1:cx, y1:topPad, x2:cx, y2:topPad + (line.nodes.length-1)*rowH,
+                   stroke:line.color, "stroke-width":7, "stroke-linecap":"round" }, svg);
+    }
+
+    line.nodes.forEach((nid, ri) => {
+      const node = nodeById[nid] || { name: nid.split(".").pop(), type:"processor" };
+      const y = topPad + ri * rowH;
+      const danger = dangerSet.has(nid), healthy = healthySet.has(nid);
+
+      // station marker by type
+      if (node.type === "sink") {
+        el("rect", { x:cx-12, y:y-12, width:24, height:24, rx:4, fill:"#171a21",
+                     stroke:line.color, "stroke-width":5 }, svg);
+      } else if (node.type === "source") {
+        el("circle", { cx, cy:y, r:15, fill:line.color }, svg);
+        el("circle", { cx, cy:y, r:6, fill:"#0f1115" }, svg);
+      } else {
+        el("circle", { cx, cy:y, r:12, fill:"#171a21", stroke:line.color, "stroke-width":5 }, svg);
+      }
+      // intersection ring
+      if (danger || healthy) {
+        el("circle", { cx, cy:y, r:21, fill:"none",
+                       stroke: danger ? "#ff4d4f" : "#28c76f",
+                       "stroke-width":3, "stroke-dasharray": danger ? "4 3" : "0" }, svg);
+      }
+
+      // labels
+      const tx = cx + 34;
+      const name = el("text", { x:tx, y:y-3, class:"station-name" }, svg);
+      name.textContent = node.name;
+      const meta = el("text", { x:tx, y:y+14, class:"station-meta", fill:"#9aa0aa" }, svg);
+      meta.textContent = TYPE_LABEL[node.type] || node.type;
+      if (node.file_path) {
+        const fp = el("text", { x:tx, y:y+29, class:"station-meta", fill:"#6b7280" }, svg);
+        fp.textContent = node.file_path.replace(/^.*\/(src\/)/, "$1");
+      }
+      if (danger) {
+        const b = el("text", { x:tx, y:y+44, class:"danger-badge", fill:"#ff4d4f" }, svg);
+        b.textContent = "⚠ 危险交叉 · 职责污染";
+      } else if (healthy) {
+        const b = el("text", { x:tx, y:y+44, class:"danger-badge", fill:"#28c76f" }, svg);
+        b.textContent = "✓ 健康交叉";
+      }
+    });
+  });
+
+  // subtitle + legend
+  const n = data.nodes.length, lines = data.mainlines.length, xs = data.intersections.length;
+  document.getElementById("subtitle").textContent =
+    `${lines} 条主线 · ${n} 个站点 · ${xs} 个交叉点`;
+  const legend = document.getElementById("legend");
+  const items = [
+    ["源头 Source", "swatch", "#3366FF"],
+    ["加工站 Processor (空心)", "swatch", "transparent"],
+    ["沉淀点 Sink (方块)", "swatch sq", "#3366FF"],
+    ["⚠ 危险交叉 / 职责污染", "swatch", "#ff4d4f"],
+    ["✓ 健康交叉", "swatch", "#28c76f"],
+  ];
+  for (const [label, cls, color] of items) {
+    const s = document.createElement("span");
+    const sw = document.createElement("span");
+    sw.className = cls; sw.style.background = color;
+    if (color === "transparent") sw.style.border = "3px solid #3366FF";
+    s.appendChild(sw); s.appendChild(document.createTextNode(label));
+    legend.appendChild(s);
+  }
+}
+
+(async function () {
+  let data = window.SUBWAY_DATA;
+  if (!data) {
+    try { data = await (await fetch("subway_map.json")).json(); }
+    catch (e) { document.getElementById("map").textContent = "无法加载 subway_map.json: " + e; return; }
+  }
+  render(data);
+})();
+</script>
+</body>
+</html>
