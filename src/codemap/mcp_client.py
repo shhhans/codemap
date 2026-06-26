@@ -14,6 +14,7 @@ the contract.
 
 from __future__ import annotations
 
+import json
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, AsyncIterator
@@ -84,15 +85,22 @@ class CodebaseMemoryClient:
     async def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> Any:
         """Call an MCP tool and return its parsed payload.
 
-        Prefers structured content when the server provides it, otherwise falls
-        back to concatenated text blocks.
+        Prefers structured content when the server provides it. Otherwise it
+        concatenates the text blocks and — since Codebase-Memory returns its
+        results as a JSON text block rather than structuredContent — parses that
+        text as JSON when possible, falling back to the raw string.
         """
         result = await self._session.call_tool(name, arguments or {})
         structured = getattr(result, "structuredContent", None)
         if structured is not None:
             return structured
-        texts = [getattr(block, "text", "") for block in result.content or []]
-        return "\n".join(t for t in texts if t)
+        text = "\n".join(
+            getattr(block, "text", "") for block in result.content or []
+        ).strip()
+        try:
+            return json.loads(text)
+        except (json.JSONDecodeError, ValueError):
+            return text
 
     # ── Convenience aliases for the graph queries we rely on ────────────────
     # Names + argument conventions verified against codebase-memory-mcp v0.8.1

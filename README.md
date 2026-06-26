@@ -44,7 +44,7 @@
 | Milestone | 目标 | 状态 |
 |-----------|------|------|
 | **M1** 基础设施连通 | Python 经 MCP 连上 Codebase-Memory，固化工具契约 | ✅ 完成 (v0.8.1 实测) |
-| **M2** 单线 DFS 追踪 | System Prompt + 滑动窗口，硬编码 Seed 跑通单主线剪枝 | ⬜ |
+| **M2** 单线 DFS 追踪 | System Prompt + 滑动窗口，硬编码 Seed 跑通单主线剪枝 | ✅ 已实现 (待真实 LLM 联调) |
 | **M3** 黑板与并发分叉 | SQLite 黑板 + `log_trace` + Fork，构造危险交叉并报警 | ⬜ |
 | **M4** 可视化与狗粮 | 导出 JSON 契约 → HTML 地铁图，解析自身源码 | ⬜ |
 
@@ -59,8 +59,14 @@ cp .env.example .env
 
 # 3. Milestone 1：验证 MCP 连通性并固化工具契约
 python -m codemap.milestones.m1_connectivity
-
 # 成功后会在 docs/mcp_tools_contract.json 生成真实的工具 schema 快照
+
+# 4. 验证 LLM 连通性（确认 MINIMAX_API_KEY 已生效）
+python -m codemap.milestones.llm_check
+
+# 5. Milestone 2：单线 DFS 污点追踪（默认 dogfood 解析本仓库）
+python -m codemap.milestones.m2_single_dfs \
+    --seed main --flow Trace --material "MCP request"
 ```
 
 ## 配置项

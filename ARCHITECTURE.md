@@ -134,8 +134,12 @@ Agent 最终输出一张用于渲染"地铁图"的 JSON 地图。权威 JSON Sch
   `index_repository` / `search_graph` / `trace_path` / `get_code_snippet`，**并把真实工具
   schema 固化为契约**（`docs/mcp_tools_contract.json`，后续三个里程碑均依赖它）。
   已用 v0.8.1 实测打通，并以 codemap 自身源码（169 节点 / 365 边）跑通真实结构化查询。
-- **M2 单线 DFS 追踪**：实现 System Prompt + 动态滑动窗口；硬编码 Seed，命令行跑通
-  单一主线语义剪枝并打印过滤后路径。
+- **M2 单线 DFS 追踪** ✅（待真实 LLM 联调）：实现 System Prompt + 动态滑动窗口
+  （`prompts.py`）、OpenAI 兼容 LLM 客户端（`llm.py`，MiniMax/Dashscope 统一）、DFS 污点
+  追踪 Worker（`agents/worker.py`，带 visited 去重 + 深度上限 + 置信度 + Blackboard 打卡）。
+  入口 `milestones/m2_single_dfs.py` 从 Seed 跑通单主线剪枝并打印地铁站点路径。
+  MCP 侧（索引→search_graph→trace_path→get_code_snippet→DFS→Blackboard）已用真实数据
+  端到端验证；真实 MiniMax 调用待 key 注入后联调。
 - **M3 全局黑板与并发分叉**：引入 SQLite 黑板 + `log_trace`；实现分叉 Fork 与多 Agent
   并发；构造含"危险交叉"的假代码测试自动报警。
 - **M4 界面可视化与自我解析**：导出 SQLite → JSON 契约 → 极简 HTML 地铁图；解析自身

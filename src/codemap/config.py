@@ -57,7 +57,7 @@ class Config:
     )
     max_depth: int = field(default_factory=lambda: int(os.getenv("CODEMAP_MAX_DEPTH", "12")))
     max_workers: int = field(default_factory=lambda: int(os.getenv("CODEMAP_MAX_WORKERS", "8")))
-    llm_provider: str = field(default_factory=lambda: os.getenv("CODEMAP_LLM_PROVIDER", "dashscope"))
+    llm_provider: str = field(default_factory=lambda: os.getenv("CODEMAP_LLM_PROVIDER", "minimax"))
 
     def llm(self, provider: str | None = None) -> LLMConfig:
         """Resolve the LLM endpoint config for `provider` (defaults to llm_provider)."""
@@ -67,7 +67,7 @@ class Config:
                 provider="minimax",
                 api_key=os.getenv("MINIMAX_API_KEY"),
                 base_url=os.getenv("MINIMAX_BASE_URL", "https://api.minimax.chat/v1"),
-                model=os.getenv("MINIMAX_MODEL", "abab6.5s-chat"),
+                model=os.getenv("MINIMAX_MODEL", "MiniMax-M3"),
             )
         if provider == "dashscope":
             return LLMConfig(
