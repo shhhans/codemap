@@ -1,0 +1,48 @@
+{
+  "mainlines": [
+    {
+      "id": "line_a",
+      "name": "A 线 · 鉴权主线",
+      "color": "#1E90FF",
+      "nodes": ["a.login", "x.boot", "a.verify", "x.pool", "a.parse_jwt", "x.fmt", "x.god", "a.user"]
+    },
+    {
+      "id": "line_b",
+      "name": "B 线 · 计费主线",
+      "color": "#F4A261",
+      "nodes": ["b.charge", "x.boot", "b.amount", "x.pool", "a.parse_jwt", "x.fmt", "x.god", "a.user"]
+    }
+  ],
+  "nodes": [
+    {"id": "a.login", "name": "login", "type": "source"},
+    {"id": "b.charge", "name": "charge", "type": "source"},
+    {"id": "x.boot", "name": "init_app", "type": "processor"},
+    {"id": "a.verify", "name": "verify_token", "type": "processor"},
+    {"id": "b.amount", "name": "normalize_amount", "type": "processor"},
+    {"id": "x.pool", "name": "db_pool", "type": "processor"},
+    {"id": "a.parse_jwt", "name": "parse_jwt", "type": "processor"},
+    {"id": "x.fmt", "name": "format_date", "type": "processor"},
+    {"id": "x.god", "name": "registry", "type": "processor"},
+    {"id": "a.user", "name": "get_current_user", "type": "sink"}
+  ],
+  "intersections": [
+    {"node_id": "x.boot", "type": "healthy-seam",
+     "description": "两线各自独立调用的公共启动步骤（配置加载），健康接缝。",
+     "involved_lines": ["line_a", "line_b"]},
+    {"node_id": "x.pool", "type": "shared-utility",
+     "description": "高相对扇入 + 适度扇出的连接池，已飞升公共大枢纽，多线复用是好架构。",
+     "involved_lines": ["line_a", "line_b"]},
+    {"node_id": "x.fmt", "type": "lightweight-utility",
+     "description": "format_date：高相对扇入但零扇出的纯透传滤镜，折叠呈现，不打断主线。",
+     "involved_lines": ["line_a", "line_b"]},
+    {"node_id": "a.parse_jwt", "type": "pollution",
+     "description": "B 线绕过稳定接口 get_current_user，直取 A 线私有中间结果 claims 半成品，职责污染。",
+     "involved_lines": ["line_a", "line_b"]},
+    {"node_id": "x.god", "type": "god-node",
+     "description": "registry：高相对扇入又高扇出，伪装成基建的上帝节点，牵一发动全身。",
+     "involved_lines": ["line_a", "line_b"]},
+    {"node_id": "a.user", "type": "healthy-seam",
+     "description": "两线消费同一稳定 User 沉淀点，健康接缝。",
+     "involved_lines": ["line_a", "line_b"]}
+  ]
+}
