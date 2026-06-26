@@ -116,8 +116,10 @@ def _report(result) -> None:
     print("\n═══ Intersections in codemap's own architecture ═══")
     if not result.reviews:
         print("  (none — the two mainlines did not cross)")
+    icons = {"shared-utility": "✦ 公共枢纽", "healthy-seam": "✓ 健康接缝",
+             "pollution": "⚠ 职责污染", "god-node": "☠ 上帝节点"}
     for r in result.reviews:
-        icon = "⚠ 危险" if r.verdict == "dangerous" else "✓ 健康"
+        icon = icons.get(r.verdict, r.verdict)
         print(f"\n  {icon}  {r.name}()  [{' × '.join(r.flows)}]\n     {r.description}")
 
 

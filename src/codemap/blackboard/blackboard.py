@@ -17,6 +17,11 @@ from pathlib import Path
 
 _SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
+# Canonical intersection verdicts (V2 four-citizen taxonomy). Two healthy
+# convergences (a stable-state seam, and a 已飞升 shared hub) and two unhealthy
+# ones (private-intermediate pollution, and an infra-disguised god node).
+VERDICTS = frozenset({"healthy-seam", "shared-utility", "pollution", "god-node"})
+
 
 @dataclass
 class Node:
@@ -119,8 +124,8 @@ class Blackboard:
         ]
 
     def record_verdict(self, node_id: str, verdict: str, description: str = "") -> None:
-        if verdict not in {"healthy", "dangerous"}:
-            raise ValueError(f"verdict must be 'healthy' or 'dangerous', got {verdict!r}")
+        if verdict not in VERDICTS:
+            raise ValueError(f"verdict must be one of {sorted(VERDICTS)}, got {verdict!r}")
         self._conn.execute(
             """
             INSERT INTO intersection_verdicts (node_id, verdict, description)

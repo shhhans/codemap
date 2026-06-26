@@ -53,9 +53,9 @@ def test_single_flow_node_is_not_an_intersection(bb: Blackboard) -> None:
 
 def test_record_verdict_round_trips(bb: Blackboard) -> None:
     bb.upsert_node(Node(id="parseJWT", name="parseJWT()"))
-    bb.record_verdict("parseJWT", "dangerous", "Billing ingests an intermediate Auth result.")
+    bb.record_verdict("parseJWT", "pollution", "Billing ingests an intermediate Auth result.")
     # Upsert path: re-recording updates rather than raising.
-    bb.record_verdict("parseJWT", "healthy", "Reclassified after refactor.")
+    bb.record_verdict("parseJWT", "shared-utility", "Reclassified after refactor.")
 
     with pytest.raises(ValueError):
         bb.record_verdict("parseJWT", "bogus")

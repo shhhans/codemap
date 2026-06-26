@@ -44,15 +44,15 @@ def test_both_nodes_are_intersections(bb: Blackboard) -> None:
 
 
 def test_export_carries_verdicts_and_involved_lines(bb: Blackboard) -> None:
-    bb.record_verdict("m.parse_jwt", "dangerous", "Billing taps an intermediate Auth result.")
-    bb.record_verdict("m.get_user", "healthy", "Both consume the stable User sink.")
+    bb.record_verdict("m.parse_jwt", "pollution", "Billing taps an intermediate Auth result.")
+    bb.record_verdict("m.get_user", "healthy-seam", "Both consume the stable User sink.")
 
     data = export_subway_map(bb.db_path)
     by_node = {i["node_id"]: i for i in data["intersections"]}
 
-    assert by_node["m.parse_jwt"]["type"] == "dangerous"
+    assert by_node["m.parse_jwt"]["type"] == "pollution"
     assert set(by_node["m.parse_jwt"]["involved_lines"]) == {"line_auth", "line_billing"}
-    assert by_node["m.get_user"]["type"] == "healthy"
+    assert by_node["m.get_user"]["type"] == "healthy-seam"
     # mainlines reference real node ids
     line_ids = {m["id"] for m in data["mainlines"]}
     assert {"line_auth", "line_billing"} <= line_ids
