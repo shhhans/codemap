@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from codemap.blackboard import Blackboard, Node, Trace
+from codemap.filtering import classify_boundary, is_global_noise, parse_stub_modules
 from codemap.llm import LLMClient
 from codemap.mcp_client import CodebaseMemoryClient
 from codemap.prompts import SYSTEM_PROMPT, Candidate, build_window
@@ -83,15 +84,37 @@ class TaintWorker:
         """
         if depth >= self.max_depth:
             return []
-        candidates = await self._downstream(qualified_name)
+
+        # Fetch the node's source once: it feeds both import-aware stubbing and
+        # the dynamic-dispatch recovery below.
+        source = await self._node_source(qualified_name)
+        stubs = parse_stub_modules(source) if source else None
+        candidates = await self._downstream(qualified_name, source)
         if not candidates:
             return []
 
-        decisions = await self._classify(qualified_name, candidates)
-        by_ref = {c.ref: c for c in candidates}
-        by_ord = {str(i): c for i, c in enumerate(candidates, 1)}
-
+        # M1 two-net partition: third-party stub boundaries skip the LLM entirely
+        # (严禁展开 AST) and are classified Sink/Dual purely structurally; only the
+        # remaining repo-internal candidates cost an LLM round-trip.
+        normal: list[Candidate] = []
         children: list[tuple[str, int]] = []
+        for c in candidates:
+            if stubs and (stubs.is_stub_call(c.ref) or stubs.is_stub_call(c.name)):
+                # Stub boundary takes precedence: a qualified external call like
+                # `requests.get` must not be dropped just because its short name
+                # (`get`) collides with the global blacklist.
+                children.extend(await self._handle_boundary(c, depth))
+            elif is_global_noise(c.name):
+                self.pruned.append((c.name, "noise", "global relation blacklist"))
+            else:
+                normal.append(c)
+        if not normal:
+            return children
+
+        decisions = await self._classify(qualified_name, normal)
+        by_ref = {c.ref: c for c in normal}
+        by_ord = {str(i): c for i, c in enumerate(normal, 1)}
+
         for d in decisions:
             cand = by_ref.get(str(d.get("node"))) or by_ord.get(str(d.get("node")))
             if cand is None:
@@ -117,13 +140,25 @@ class TaintWorker:
         return children
 
     # ── MCP queries ──────────────────────────────────────────────────────────
-    async def _downstream(self, qualified_name: str) -> list[Candidate]:
+    async def _node_source(self, qualified_name: str) -> str:
+        """Fetch the node's body source (empty string if unavailable)."""
+        try:
+            snip = _as_dict(await self.mcp.get_code_snippet(self.project, qualified_name))
+        except Exception:  # noqa: BLE001 - a missing snippet shouldn't kill the walk
+            return ""
+        return snip.get("source") or ""
+
+    async def _downstream(self, qualified_name: str, source: str = "") -> list[Candidate]:
         """1-hop downstream callees + their signatures.
 
         Uses query_graph keyed on the exact qualified_name (not trace_path's
         short name), so callees are resolved precisely even when the repo has
         several same-named functions — otherwise distinct mainlines collide on
         a shared short name and produce phantom intersections.
+
+        Returns *all* callees; the global blacklist and third-party stub nets are
+        applied by ``expand_one`` (stubs must win over the blacklist so a
+        qualified `requests.get` isn't dropped on its short name `get`).
         """
         cypher = (
             f"MATCH (f {{qualified_name:'{qualified_name}'}})-[:CALLS]->(t) "
@@ -136,24 +171,45 @@ class TaintWorker:
             qn = row.get("qn") or row.get("name")
             if not qn or qn == qualified_name or qn in seen:
                 continue
+            short = row.get("name") or qn.rsplit(".", 1)[-1]
             seen.add(qn)
             sig = await self._signature(qn)
-            out.append(Candidate(ref=qn, name=row.get("name") or qn.rsplit(".", 1)[-1],
+            out.append(Candidate(ref=qn, name=short,
                                  signature=sig.text, file_path=sig.file_path))
 
-        out.extend(await self._recover_dynamic(qualified_name, seen))
+        out.extend(await self._recover_dynamic(qualified_name, seen, source))
         return out
 
-    # Names that look like calls in source but are never mainline nodes.
-    _CALL_NOISE = frozenset({
-        "if", "for", "while", "return", "print", "len", "range", "int", "str",
-        "float", "bool", "dict", "list", "set", "tuple", "super", "isinstance",
-        "getattr", "setattr", "hasattr", "enumerate", "zip", "max", "min", "sum",
-        "open", "type", "format", "join", "append", "get", "put_nowait", "add",
-        "split", "strip", "items", "keys", "values", "and", "or", "not",
-    })
+    # ── M1 boundary handling (third-party stubs) ─────────────────────────────
+    async def _handle_boundary(self, cand: Candidate, depth: int) -> list[tuple[str, int]]:
+        """Classify a stubbed third-party call Sink vs Dual from its edges alone
+        (no AST expansion, no LLM). Dual boundaries keep flowing material onward
+        and are returned as children; Sinks are recorded and terminate."""
+        kind = classify_boundary(await self._out_edge_count(cand.ref))
+        role = "sink" if kind == "sink" else "processor"
+        is_new = await self._record(
+            cand.ref, role=role, confidence=0.7, depth=depth + 1,
+            reason=f"third-party stub → {kind}", name=cand.name, file_path=cand.file_path,
+        )
+        return [(cand.ref, depth + 1)] if (kind == "dual" and is_new) else []
 
-    async def _recover_dynamic(self, qualified_name: str, already: set[str]) -> list[Candidate]:
+    async def _out_edge_count(self, qualified_name: str) -> int:
+        """Number of outgoing CALLS edges from a node (0 if absent from graph)."""
+        cypher = (
+            f"MATCH (f {{qualified_name:'{qualified_name}'}})-[:CALLS]->(t) "
+            "RETURN count(t) AS n"
+        )
+        rows = self._rows(await self.mcp.query_graph(self.project, query=cypher))
+        if not rows:
+            return 0
+        raw = rows[0].get("n", rows[0].get("count(t)", 0))
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return 0
+
+    async def _recover_dynamic(self, qualified_name: str, already: set[str],
+                               source: str = "") -> list[Candidate]:
         """Recover dynamic-dispatch callees the static graph dropped.
 
         The static call graph cannot resolve calls like ``worker.expand_one()``
@@ -164,14 +220,14 @@ class TaintWorker:
         """
         import re
 
-        snip = _as_dict(await self.mcp.get_code_snippet(self.project, qualified_name))
-        source = snip.get("source") or ""
+        if not source:
+            source = await self._node_source(qualified_name)
         if not source:
             return []
         own = qualified_name.rsplit(".", 1)[-1]
         names = {
             n for n in re.findall(r"([A-Za-z_]\w*)\s*\(", source)
-            if n != own and n not in self._CALL_NOISE and not n.startswith("__")
+            if n != own and not is_global_noise(n) and not n.startswith("__")
         }
         out: list[Candidate] = []
         for name in names:
