@@ -150,8 +150,18 @@ Agent 最终输出一张用于渲染"地铁图"的 JSON 地图。权威 JSON Sch
   渲染地铁图——共享节点合并为**真正的换乘站**（单节点两线汇入），危险交叉则保留在各自主线、
   用**主线外的红色虚线**相连（标注职责污染）；`scripts/render_subway.py` 经 Chromium 出 PNG。
   `milestones/m4_dogfood.py` 让 codemap 解析自身（338 节点）跑两条真实主线完成狗粮验证。
-  狗粮过程中暴露并修复了一个真实精度 bug：`trace_path` 按短名解析下游，仓库内同名函数
-  （多个 `_run`）会撞名产生幻象交叉——已改用 `query_graph` 按 qualified_name 精确解析。
+  狗粮过程中暴露并修复了两个真实问题：
+  (1) `trace_path` 按短名解析下游，仓库内同名函数（多个 `_run`）会撞名产生幻象交叉——
+  已改用 `query_graph` 按 qualified_name 精确解析；
+  (2) 动态分发调用（如 `worker.expand_one()`，接收者来自 dict 取值）静态图无法解析、
+  整条边丢失——`worker._recover_dynamic` 在 Agent 层做**名称匹配补边**：扫描节点源码提取
+  被调用名，对图中**唯一同名**的 Function/Method 补一条 `recovered=True` 的低 confidence
+  (×0.8) 候选边。补边后 Coordinator→Worker 的换乘骨干得以在自身狗粮图中显现。
+
+> **待改进（狗粮发现）**：当前评审启发式「任一主线视其为 processor 即判 dangerous」会把
+> **设计上就该共享的工具节点**（如 `expand_one`/`_downstream` 这类多驱动复用的核心原语）
+> 误报为职责污染。真正的污染（fixture 的 `parse_jwt`）是「跨线摄取某主线的私有中间结果」，
+> 与「共享公共工具」需进一步区分（例如看节点是否为某主线的私有实现 vs 公共 API）。
 
 ## 8. 已知风险与设计决策
 

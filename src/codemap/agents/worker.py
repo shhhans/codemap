@@ -104,6 +104,8 @@ class TaintWorker:
 
             is_sink = bool(d.get("is_sink", False))
             confidence = float(d.get("confidence", 0.5))
+            if cand.recovered:  # name-matched dynamic edge: discount certainty
+                confidence *= 0.8
             role = "sink" if is_sink else "processor"
             is_new = await self._record(
                 cand.ref, role=role, confidence=confidence, depth=depth + 1,
@@ -138,6 +140,57 @@ class TaintWorker:
             sig = await self._signature(qn)
             out.append(Candidate(ref=qn, name=row.get("name") or qn.rsplit(".", 1)[-1],
                                  signature=sig.text, file_path=sig.file_path))
+
+        out.extend(await self._recover_dynamic(qualified_name, seen))
+        return out
+
+    # Names that look like calls in source but are never mainline nodes.
+    _CALL_NOISE = frozenset({
+        "if", "for", "while", "return", "print", "len", "range", "int", "str",
+        "float", "bool", "dict", "list", "set", "tuple", "super", "isinstance",
+        "getattr", "setattr", "hasattr", "enumerate", "zip", "max", "min", "sum",
+        "open", "type", "format", "join", "append", "get", "put_nowait", "add",
+        "split", "strip", "items", "keys", "values", "and", "or", "not",
+    })
+
+    async def _recover_dynamic(self, qualified_name: str, already: set[str]) -> list[Candidate]:
+        """Recover dynamic-dispatch callees the static graph dropped.
+
+        The static call graph cannot resolve calls like ``worker.expand_one()``
+        when the receiver's type is unknown (e.g. it came out of a dict). We
+        read the node's source, pull the called names, and for any name that
+        maps to exactly one Function/Method in the graph (so it's unambiguous),
+        add it as a recovered, lower-confidence candidate.
+        """
+        import re
+
+        snip = _as_dict(await self.mcp.get_code_snippet(self.project, qualified_name))
+        source = snip.get("source") or ""
+        if not source:
+            return []
+        own = qualified_name.rsplit(".", 1)[-1]
+        names = {
+            n for n in re.findall(r"([A-Za-z_]\w*)\s*\(", source)
+            if n != own and n not in self._CALL_NOISE and not n.startswith("__")
+        }
+        out: list[Candidate] = []
+        for name in names:
+            cypher = (
+                f"MATCH (t) WHERE t.name = '{name}' AND (t:Function OR t:Method) "
+                "RETURN DISTINCT t.qualified_name AS qn"
+            )
+            rows = self._rows(await self.mcp.query_graph(self.project, query=cypher))
+            # Only unambiguous (unique-name) matches, and not already an edge.
+            if len(rows) != 1:
+                continue
+            qn = rows[0].get("qn")
+            if not qn or qn == qualified_name or qn in already:
+                continue
+            already.add(qn)
+            sig = await self._signature(qn)
+            out.append(Candidate(ref=qn, name=name,
+                                 signature=f"⟨动态调用⟩ {sig.text}", file_path=sig.file_path,
+                                 recovered=True))
         return out
 
     @staticmethod

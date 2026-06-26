@@ -70,6 +70,9 @@ class Candidate:
     name: str
     signature: str
     file_path: str | None = None
+    # True when this edge was recovered by name-matching the source (a dynamic
+    # dispatch the static call graph missed), so it carries less certainty.
+    recovered: bool = False
 
 
 def build_window(
@@ -88,7 +91,8 @@ def build_window(
     ]
     for i, c in enumerate(candidates, 1):
         loc = f"  ({c.file_path})" if c.file_path else ""
-        lines.append(f"{i}. {c.ref}{loc}")
+        tag = "  ⟨动态调用·名称匹配，置信偏低⟩" if c.recovered else ""
+        lines.append(f"{i}. {c.ref}{loc}{tag}")
         lines.append(f"   signature/snippet: {c.signature}")
     lines += [
         "",
