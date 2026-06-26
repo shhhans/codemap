@@ -116,25 +116,36 @@ class TaintWorker:
 
     # ── MCP queries ──────────────────────────────────────────────────────────
     async def _downstream(self, qualified_name: str) -> list[Candidate]:
-        """1-hop downstream callees + their signatures."""
-        short = qualified_name.rsplit(".", 1)[-1]
-        result = await self.mcp.trace_path(
-            self.project, mode="calls", function_name=short
+        """1-hop downstream callees + their signatures.
+
+        Uses query_graph keyed on the exact qualified_name (not trace_path's
+        short name), so callees are resolved precisely even when the repo has
+        several same-named functions — otherwise distinct mainlines collide on
+        a shared short name and produce phantom intersections.
+        """
+        cypher = (
+            f"MATCH (f {{qualified_name:'{qualified_name}'}})-[:CALLS]->(t) "
+            "RETURN DISTINCT t.qualified_name AS qn, t.name AS name"
         )
-        callees = _as_dict(result).get("callees", []) or []
+        rows = self._rows(await self.mcp.query_graph(self.project, query=cypher))
         out: list[Candidate] = []
-        for c in callees:
-            if c.get("hop") not in (1, None):  # immediate downstream only
+        seen: set[str] = set()
+        for row in rows:
+            qn = row.get("qn") or row.get("name")
+            if not qn or qn == qualified_name or qn in seen:
                 continue
-            qn = c.get("qualified_name") or c.get("name")
-            if not qn or qn == qualified_name:
-                continue
+            seen.add(qn)
             sig = await self._signature(qn)
-            out.append(
-                Candidate(ref=qn, name=c.get("name", qn), signature=sig.text,
-                          file_path=sig.file_path)
-            )
+            out.append(Candidate(ref=qn, name=row.get("name") or qn.rsplit(".", 1)[-1],
+                                 signature=sig.text, file_path=sig.file_path))
         return out
+
+    @staticmethod
+    def _rows(result: Any) -> list[dict[str, Any]]:
+        """Turn query_graph's {columns, rows} payload into a list of dicts."""
+        data = _as_dict(result)
+        cols = data.get("columns") or []
+        return [dict(zip(cols, row)) for row in data.get("rows", [])]
 
     @dataclass
     class _Sig:

@@ -115,8 +115,16 @@ class CodebaseMemoryClient:
 
     async def trace_path(self, project: str, **arguments: Any) -> Any:
         """Trace through the graph. mode='calls' (callers/callees),
-        'data_flow' (value propagation), or 'cross_service'."""
+        'data_flow' (value propagation), or 'cross_service'.
+
+        Note: trace_path keys on a *short* function_name, so it is ambiguous when
+        the repo has several functions of the same name. For precise 1-hop
+        callee resolution prefer query_graph keyed on qualified_name."""
         return await self.call_tool("trace_path", {"project": project, **arguments})
+
+    async def query_graph(self, project: str, query: str, **arguments: Any) -> Any:
+        """Run a Cypher query against the knowledge graph (precise, qualified)."""
+        return await self.call_tool("query_graph", {"project": project, "query": query, **arguments})
 
     async def get_code_snippet(self, project: str, qualified_name: str, **arguments: Any) -> Any:
         return await self.call_tool(

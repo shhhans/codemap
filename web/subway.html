@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <title>Codemap · 业务主线地铁图</title>
 <style>
-  :root { --bg:#0f1115; --panel:#171a21; --ink:#e8eaed; --muted:#9aa0aa; --rail:#2a2f3a; }
+  :root { --bg:#0f1115; --ink:#e8eaed; --muted:#9aa0aa; }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--ink);
          font-family:-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif; }
@@ -17,9 +17,9 @@
   .sq { border-radius:3px; }
   #map { padding:0 16px 32px; }
   svg text { fill:var(--ink); }
-  .station-name { font-size:14px; font-weight:600; }
-  .station-meta { font-size:11px; }
-  .danger-badge { font-size:11px; font-weight:700; }
+  .name { font-size:14px; font-weight:600; }
+  .meta { font-size:11px; }
+  .badge { font-size:11px; font-weight:700; }
 </style>
 </head>
 <body>
@@ -34,98 +34,167 @@
 const SVG = "http://www.w3.org/2000/svg";
 const TYPE_LABEL = { source:"源头 Source", processor:"加工站 Processor", sink:"沉淀点 Sink", barrier:"防爆墙 Barrier" };
 
-function el(name, attrs={}, parent=null) {
+function el(name, attrs = {}, parent = null, text = null) {
   const n = document.createElementNS(SVG, name);
   for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (text != null) n.textContent = text;
   if (parent) parent.appendChild(n);
   return n;
 }
 
 function render(data) {
   const nodeById = Object.fromEntries(data.nodes.map(n => [n.id, n]));
-  const dangerSet = new Set(data.intersections.filter(i => i.type === "dangerous").map(i => i.node_id));
-  const healthySet = new Set(data.intersections.filter(i => i.type === "healthy").map(i => i.node_id));
+  const verdict = {}, vdesc = {};
+  data.intersections.forEach(i => { verdict[i.node_id] = i.type; vdesc[i.node_id] = i.description; });
 
-  // Layout: each mainline is a vertical column of stations.
-  const topPad = 60, rowH = 96, colW = 360, leftPad = 90, stationX = 46;
-  const maxLen = Math.max(1, ...data.mainlines.map(m => m.nodes.length));
-  const width = leftPad + data.mainlines.length * colW + 120;
-  const height = topPad + maxLen * rowH + 40;
+  // node -> set of line indices it appears on
+  const nodeLines = {};
+  data.mainlines.forEach((ln, li) =>
+    ln.nodes.forEach(nid => { (nodeLines[nid] = nodeLines[nid] || new Set()).add(li); }));
 
-  const svg = el("svg", { width, height, viewBox:`0 0 ${width} ${height}` }, document.getElementById("map"));
+  // ── Layout ──────────────────────────────────────────────────────────────
+  const topPad = 130, rowH = 110, labelW = 280, colGap = 460;
+  const colX = data.mainlines.map((_, li) => labelW + 70 + li * colGap);
 
-  data.mainlines.forEach((line, ci) => {
-    const cx = leftPad + ci * colW + stationX;
-    // line title
-    const t = el("text", { x: cx - 30, y: 36, class:"station-name" }, svg);
-    t.textContent = line.name;
-    el("rect", { x: cx - 34, y: 44, width: 8, height: 8, rx:2, fill: line.color }, svg);
+  // tentative per-line position (column x, row y)
+  const perLine = {};
+  data.mainlines.forEach((ln, li) =>
+    ln.nodes.forEach((nid, r) => { perLine[li + "|" + nid] = { x: colX[li], y: topPad + r * rowH }; }));
 
-    // the rail
-    if (line.nodes.length > 1) {
-      el("line", { x1:cx, y1:topPad, x2:cx, y2:topPad + (line.nodes.length-1)*rowH,
-                   stroke:line.color, "stroke-width":7, "stroke-linecap":"round" }, svg);
+  // healthy interchanges collapse into ONE shared transfer station at the
+  // midpoint between the lines that meet there.
+  const merged = {};
+  for (const nid in nodeLines) {
+    const lis = [...nodeLines[nid]];
+    if (lis.length > 1 && verdict[nid] === "healthy") {
+      const xs = lis.map(li => colX[li]), ys = lis.map(li => perLine[li + "|" + nid].y);
+      merged[nid] = { x: xs.reduce((a, b) => a + b, 0) / xs.length,
+                      y: ys.reduce((a, b) => a + b, 0) / ys.length };
     }
+  }
+  const posFor = (li, nid) => merged[nid] || perLine[li + "|" + nid];
 
-    line.nodes.forEach((nid, ri) => {
-      const node = nodeById[nid] || { name: nid.split(".").pop(), type:"processor" };
-      const y = topPad + ri * rowH;
-      const danger = dangerSet.has(nid), healthy = healthySet.has(nid);
+  const maxRows = Math.max(1, ...data.mainlines.map(l => l.nodes.length));
+  const width = colX[colX.length - 1] + labelW + 60;
+  const height = topPad + maxRows * rowH + 70;
+  const svg = el("svg", { width, height, viewBox: `0 0 ${width} ${height}` }, document.getElementById("map"));
 
-      // station marker by type
-      if (node.type === "sink") {
-        el("rect", { x:cx-12, y:y-12, width:24, height:24, rx:4, fill:"#171a21",
-                     stroke:line.color, "stroke-width":5 }, svg);
-      } else if (node.type === "source") {
-        el("circle", { cx, cy:y, r:15, fill:line.color }, svg);
-        el("circle", { cx, cy:y, r:6, fill:"#0f1115" }, svg);
-      } else {
-        el("circle", { cx, cy:y, r:12, fill:"#171a21", stroke:line.color, "stroke-width":5 }, svg);
-      }
-      // intersection ring
-      if (danger || healthy) {
-        el("circle", { cx, cy:y, r:21, fill:"none",
-                       stroke: danger ? "#ff4d4f" : "#28c76f",
-                       "stroke-width":3, "stroke-dasharray": danger ? "4 3" : "0" }, svg);
-      }
+  // ── Rails (one polyline per mainline, routed through shared stations) ─────
+  data.mainlines.forEach((ln, li) => {
+    const pts = ln.nodes.map(nid => posFor(li, nid));
+    if (pts.length > 1) {
+      const d = pts.map((p, i) => (i ? "L" : "M") + p.x + " " + p.y).join(" ");
+      el("path", { d, fill: "none", stroke: ln.color, "stroke-width": 8,
+                   "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
+    }
+    el("rect", { x: colX[li] - 9, y: 84, width: 16, height: 16, rx: 4, fill: ln.color }, svg);
+    el("text", { x: colX[li] + 16, y: 97, class: "name" }, svg, ln.name);
+  });
 
-      // labels
-      const tx = cx + 34;
-      const name = el("text", { x:tx, y:y-3, class:"station-name" }, svg);
-      name.textContent = node.name;
-      const meta = el("text", { x:tx, y:y+14, class:"station-meta", fill:"#9aa0aa" }, svg);
-      meta.textContent = TYPE_LABEL[node.type] || node.type;
-      if (node.file_path) {
-        const fp = el("text", { x:tx, y:y+29, class:"station-meta", fill:"#6b7280" }, svg);
-        fp.textContent = node.file_path.replace(/^.*\/(src\/)/, "$1");
+  // ── Dangerous crossings: an off-mainline red connector between the lines ──
+  for (const nid in nodeLines) {
+    const lis = [...nodeLines[nid]];
+    if (lis.length > 1 && verdict[nid] === "dangerous") {
+      const ps = lis.map(li => perLine[li + "|" + nid]);
+      for (let k = 0; k < ps.length - 1; k++) {
+        const a = ps[k], b = ps[k + 1], mx = (a.x + b.x) / 2;
+        // a gently bowed dashed link so it reads as "outside" the rails
+        el("path", { d: `M ${a.x} ${a.y} Q ${mx} ${(a.y + b.y) / 2 - 34} ${b.x} ${b.y}`,
+                     fill: "none", stroke: "#ff4d4f", "stroke-width": 3.5,
+                     "stroke-dasharray": "10 6", opacity: 0.95 }, svg);
+        el("text", { x: mx, y: (a.y + b.y) / 2 - 42, class: "badge", fill: "#ff4d4f",
+                     "text-anchor": "middle" }, svg, "⚠ 职责污染：跨线摄取中间结果");
       }
-      if (danger) {
-        const b = el("text", { x:tx, y:y+44, class:"danger-badge", fill:"#ff4d4f" }, svg);
-        b.textContent = "⚠ 危险交叉 · 职责污染";
-      } else if (healthy) {
-        const b = el("text", { x:tx, y:y+44, class:"danger-badge", fill:"#28c76f" }, svg);
-        b.textContent = "✓ 健康交叉";
-      }
+    }
+  }
+
+  // ── Stations + labels ────────────────────────────────────────────────────
+  const drawn = new Set();
+  const lineColorOf = nid => data.mainlines[[...nodeLines[nid]][0]].color;
+  data.mainlines.forEach((ln, li) => {
+    ln.nodes.forEach(nid => {
+      const isMerged = !!merged[nid];
+      const key = isMerged ? "M|" + nid : li + "|" + nid;
+      if (drawn.has(key)) return;
+      drawn.add(key);
+      const p = posFor(li, nid);
+      const node = nodeById[nid] || { name: nid.split(".").pop(), type: "processor" };
+      drawStation(svg, p, node, ln.color, verdict[nid], isMerged);
+      drawLabel(svg, p, node, nid, li, data.mainlines.length, isMerged, verdict[nid]);
     });
   });
 
-  // subtitle + legend
-  const n = data.nodes.length, lines = data.mainlines.length, xs = data.intersections.length;
+  // ── Header + legend ──────────────────────────────────────────────────────
+  const xs = data.intersections;
   document.getElementById("subtitle").textContent =
-    `${lines} 条主线 · ${n} 个站点 · ${xs} 个交叉点`;
+    `${data.mainlines.length} 条主线 · ${data.nodes.length} 个站点 · ${xs.length} 个换乘点` +
+    `（${xs.filter(i => i.type === "dangerous").length} 危险 / ${xs.filter(i => i.type === "healthy").length} 健康）`;
+  buildLegend();
+}
+
+function drawStation(svg, p, node, color, verdict, isMerged) {
+  if (isMerged) {
+    // classic interchange: white capsule both lines pass through
+    el("circle", { cx: p.x, cy: p.y, r: 19, fill: "#fff", stroke: "#0f1115", "stroke-width": 4 }, svg);
+    el("circle", { cx: p.x, cy: p.y, r: 26, fill: "none", stroke: "#28c76f", "stroke-width": 3 }, svg);
+    return;
+  }
+  if (node.type === "sink") {
+    el("rect", { x: p.x - 12, y: p.y - 12, width: 24, height: 24, rx: 4, fill: "#171a21",
+                 stroke: color, "stroke-width": 5 }, svg);
+  } else if (node.type === "source") {
+    el("circle", { cx: p.x, cy: p.y, r: 15, fill: color }, svg);
+    el("circle", { cx: p.x, cy: p.y, r: 6, fill: "#0f1115" }, svg);
+  } else {
+    el("circle", { cx: p.x, cy: p.y, r: 12, fill: "#171a21", stroke: color, "stroke-width": 5 }, svg);
+  }
+  if (verdict === "dangerous") {
+    el("circle", { cx: p.x, cy: p.y, r: 22, fill: "none", stroke: "#ff4d4f",
+                   "stroke-width": 3, "stroke-dasharray": "4 3" }, svg);
+  }
+}
+
+function drawLabel(svg, p, node, nid, li, nLines, isMerged, verdict) {
+  // line 0 labels go left, the rightmost line goes right; merged stations are
+  // labelled below-centre in the gap so nothing collides.
+  let x, anchor, y0 = p.y - 3;
+  if (isMerged) { x = p.x; anchor = "middle"; y0 = p.y + 40; }
+  else if (li === 0 && nLines > 1) { x = p.x - 30; anchor = "end"; }
+  else { x = p.x + 30; anchor = "start"; }
+
+  el("text", { x, y: y0, class: "name", "text-anchor": anchor }, svg, node.name);
+  el("text", { x, y: y0 + 16, class: "meta", "text-anchor": anchor, fill: "#9aa0aa" }, svg,
+     TYPE_LABEL[node.type] || node.type);
+  if (node.file_path) {
+    el("text", { x, y: y0 + 31, class: "meta", "text-anchor": anchor, fill: "#6b7280" }, svg,
+       node.file_path.replace(/^.*\/(src\/|fixtures\/)/, "$1"));
+  }
+  if (verdict === "dangerous") {
+    el("text", { x, y: y0 + 47, class: "badge", "text-anchor": anchor, fill: "#ff4d4f" }, svg,
+       "⚠ 危险换乘 · 职责污染");
+  } else if (verdict === "healthy") {
+    el("text", { x, y: y0 + (isMerged ? 16 : 47), class: "badge", "text-anchor": anchor, fill: "#28c76f" }, svg,
+       "✓ 健康换乘");
+  }
+}
+
+function buildLegend() {
   const legend = document.getElementById("legend");
+  legend.innerHTML = "";
   const items = [
     ["源头 Source", "swatch", "#3366FF"],
     ["加工站 Processor (空心)", "swatch", "transparent"],
     ["沉淀点 Sink (方块)", "swatch sq", "#3366FF"],
-    ["⚠ 危险交叉 / 职责污染", "swatch", "#ff4d4f"],
-    ["✓ 健康交叉", "swatch", "#28c76f"],
+    ["健康换乘站 (白点·绿环)", "swatch", "#fff"],
+    ["⚠ 危险换乘 / 职责污染 (红环)", "swatch", "#ff4d4f"],
+    ["⚠ 主线外红色虚线 = 跨线污染连接", "swatch", "#ff4d4f"],
   ];
   for (const [label, cls, color] of items) {
     const s = document.createElement("span");
     const sw = document.createElement("span");
     sw.className = cls; sw.style.background = color;
     if (color === "transparent") sw.style.border = "3px solid #3366FF";
+    if (color === "#fff") sw.style.boxShadow = "0 0 0 3px #28c76f";
     s.appendChild(sw); s.appendChild(document.createTextNode(label));
     legend.appendChild(s);
   }

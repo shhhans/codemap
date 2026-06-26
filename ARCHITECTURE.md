@@ -146,8 +146,12 @@ Agent 最终输出一张用于渲染"地铁图"的 JSON 地图。权威 JSON Sch
   fixture `fixtures/sample_app/`（Auth + Billing 双线）刻意制造危险交叉 `parse_jwt`（被两线当作
   中间环节摄取）与健康交叉 `get_current_user`（稳定沉淀点）。入口 `milestones/m3_concurrent.py`
   实测：`charge()` 处 Fork 2 worker，自动报警 `parse_jwt` 为职责污染，并渲染地铁图标红。
-- **M4 界面可视化与自我解析**：导出 SQLite → JSON 契约 → 极简 HTML 地铁图；解析自身
-  Python 源码完成狗粮验证。
+- **M4 界面可视化与自我解析** ✅：`export.py` 导出 SQLite → JSON 契约；`web/subway.html`
+  渲染地铁图——共享节点合并为**真正的换乘站**（单节点两线汇入），危险交叉则保留在各自主线、
+  用**主线外的红色虚线**相连（标注职责污染）；`scripts/render_subway.py` 经 Chromium 出 PNG。
+  `milestones/m4_dogfood.py` 让 codemap 解析自身（338 节点）跑两条真实主线完成狗粮验证。
+  狗粮过程中暴露并修复了一个真实精度 bug：`trace_path` 按短名解析下游，仓库内同名函数
+  （多个 `_run`）会撞名产生幻象交叉——已改用 `query_graph` 按 qualified_name 精确解析。
 
 ## 8. 已知风险与设计决策
 
