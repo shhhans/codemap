@@ -10,7 +10,14 @@ from pathlib import Path
 
 import pytest
 
-from codemap.blackboard import Blackboard, Node, Trace
+from codemap.blackboard import VERDICTS, Blackboard, Node, Trace
+
+
+def test_verdicts_constant_is_exported_from_package() -> None:
+    # Regression: review.py does `from codemap.blackboard import VERDICTS`; if the
+    # package __init__ doesn't re-export it, every LLM verdict silently falls back
+    # to the deterministic backstop.
+    assert {"healthy-seam", "shared-utility", "pollution", "god-node"} == set(VERDICTS)
 
 
 @pytest.fixture()

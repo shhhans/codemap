@@ -209,11 +209,27 @@ V2 的核心突破：从纯数据流追踪，升级为带**架构所有权 (Owne
   > 系统级基建。加下限后 `parse_jwt` 正确回落为 `pollution`、`get_current_user`（sink）为
   > `healthy-seam`。
 - **V2-M3 四态评审** ✅：[`agents/review.py`](./src/codemap/agents/review.py) 升级为**归属权
-  联合判断**（相对扇入 × 扇出 × 可见性），verdict 由两态扩为四态：
-  `healthy-seam` / `shared-utility` / `pollution` / `god-node`。确定性兜底**先看中心度**——
-  高相对扇入的节点优先归入 shared-utility(低扇出) 或 god-node(高扇出)，只有**低中心度**的
-  私有中间环节被跨线摄取才判 pollution。地铁图（[`web/subway.html`](./web/subway.html)）据此
-  渲染：金色枢纽 / 绿色接缝（换乘站合并）vs 红色污染 / 上帝节点（主线外红虚线）。
+  联合判断**，verdict 由两态扩为四态：
+  `healthy-seam` / `shared-utility` / `pollution` / `god-node`。地铁图
+  （[`web/subway.html`](./web/subway.html)）据此渲染：金色枢纽 / 绿色接缝（换乘站合并）vs
+  红色污染 / 上帝节点（主线外红虚线）。
+
+  > **数据流证据 + Agent 主判（真实 LLM 狗粮迭代得出）**：纯结构指标无法区分两类"被两线调用"
+  > 的节点——`parse_jwt`（真污染，billing 绕过稳定接口截取 auth 私有 claims）和
+  > `index_repository`（假污染，两入口各自独立调用的公共启动步骤）在调用图上**长得一样**。
+  > 因此 ReviewAgent 现在给 LLM 喂**数据流证据 (Provenance)**：每条主线**追踪到该节点的路径**
+  > （数据如何抵达）+ 该节点的**callers/callees** + 指标 + 可见性，让 LLM **分析可能的数据流**
+  > 后判定——「两线各自浅层独立到达的公共依赖 → seam/utility」vs「一条线伸进另一条链路截取
+  > 私有半成品 → pollution」。**指标降为佐证，LLM 为主判官**；确定性规则仅在 LLM 不可用时兜底。
+  > 实测两形态均判对（index_repository→healthy-seam、parse_jwt→pollution，且 LLM 能引用
+  > docstring「NOT a stable domain object」佐证）。
+  >
+  > 同时修了两个真实 bug：(1) `VERDICTS` 未从包 `__init__` 重导出，`from codemap.blackboard
+  > import VERDICTS` 静默抛错 → **此前每次评审都回退到确定性兜底、LLM 从未被真正咨询**；
+  > (2) 推理模型 (`MiniMax-M3`) 的 `<think>` 块吃 token，未设 `max_tokens` 会截断 JSON——
+  > 已设 4096 headroom。回归测试见 [`tests/test_review_ownership.py`](./tests/test_review_ownership.py)
+  > （断言 LLM 判定覆盖确定性结果）与 [`tests/test_blackboard.py`](./tests/test_blackboard.py)
+  > （断言 VERDICTS 可从包导入）。
 
 > **已解决（原狗粮发现）**：V1 启发式「任一主线视其为 processor 即判 dangerous」会把
 > **设计上就该共享的工具节点**（如 `expand_one`/`_downstream`）误报为职责污染。V2 用「先看

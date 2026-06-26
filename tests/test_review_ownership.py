@@ -25,12 +25,33 @@ class FakeMCP:
     async def get_code_snippet(self, project: str, qualified_name: str, **_: Any) -> dict:
         return {"source": f"def {qualified_name.rsplit('.',1)[-1]}(): ...", "name": qualified_name}
 
+    async def query_graph(self, project: str, query: str, **_: Any) -> dict:
+        # Provenance neighbor lookups; empty is fine for these tests.
+        return {"columns": [], "rows": []}
+
 
 class FallbackLLM:
     """Always raises so the agent uses its deterministic structural verdict."""
 
     def chat(self, system: str, window: str) -> Any:
         raise RuntimeError("LLM offline — exercise the backstop")
+
+
+class StubLLM:
+    """Returns a fixed four-state verdict, so we can prove the LLM's answer is
+    actually used (not silently swallowed onto the deterministic backstop)."""
+
+    def __init__(self, verdict: str, description: str = "llm verdict") -> None:
+        self._v, self._d = verdict, description
+
+    def chat(self, system: str, window: str) -> Any:
+        v, d = self._v, self._d
+
+        class _Reply:
+            def json(self_inner) -> dict:
+                return {"verdict": v, "description": d}
+
+        return _Reply()
 
 
 class FakeProbe:
@@ -99,6 +120,20 @@ def test_high_fanin_high_fanout_is_god_node(board: Blackboard) -> None:
 
 def test_all_sink_crossing_is_healthy_seam(board: Blackboard) -> None:
     assert _verdicts(board)["m.get_user"] == "healthy-seam"
+
+
+def test_llm_verdict_overrides_deterministic(board: Blackboard) -> None:
+    # parse_jwt is deterministically pollution; an LLM that (via provenance)
+    # judged it shared-utility must WIN. This is the regression for the swallowed
+    # `from codemap.blackboard import VERDICTS` ImportError, which silently forced
+    # every verdict onto the deterministic backstop and never consulted the LLM.
+    metrics = {nid: NodeMetrics(nid, fan_in=2, fan_out=1, system_size=300)
+               for nid in ("m.parse_jwt", "m.expand", "m.god", "m.get_user")}
+    agent = ReviewAgent(mcp=FakeMCP(), llm=StubLLM("shared-utility"),
+                        blackboard=board, project="p", probe=FakeProbe(metrics))
+    res = {r.node_id: r for r in asyncio.run(agent.review_all())}
+    assert res["m.parse_jwt"].verdict == "shared-utility"   # LLM, not deterministic
+    assert res["m.parse_jwt"].description == "llm verdict"   # LLM prose, not _default_desc
 
 
 def test_verdicts_persist_to_blackboard(board: Blackboard) -> None:

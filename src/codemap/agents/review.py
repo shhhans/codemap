@@ -34,7 +34,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 
-from codemap.blackboard import Blackboard
+from codemap.blackboard import VERDICTS, Blackboard
 from codemap.config import config
 from codemap.llm import LLMClient
 from codemap.mcp_client import CodebaseMemoryClient
@@ -49,31 +49,45 @@ from codemap.metrics import (
 
 REVIEW_SYSTEM_PROMPT = """\
 你是「代码加工厂」世界观下的**交叉点评审 Agent (Intersection Reviewer)**。
-多条业务主线在某个代码节点交汇时，你要判断这次交汇属于哪一类「代码公民」。
+多条业务主线在某个代码节点交汇时，你要**分析数据如何流经此处**，判断它属于哪一类公民。
 
 # 四类交叉公民（V2）
-- **[healthy-seam 稳定接缝]**：所有交汇主线都把它当作**稳定沉淀点 (Sink)**
-  （如 `getCurrentUser()` 返回的稳定 User 对象），各线消费的是这份已沉淀的稳定状态。
+- **[healthy-seam 稳定接缝]**：各交汇主线消费的是它产出的**稳定状态 (Sink)**
+  （如 `getCurrentUser()` 返回的 User 对象），或它是各线**各自独立调用的公共依赖/启动步骤**
+  （如索引初始化、配置加载）——这类「大家本就该调用的共享步骤」是健康的接缝。
 - **[shared-utility 公共枢纽 / 已飞升节点]**：被设计为系统级复用的**底层公共原语**
-  （如幂等校验、节点展开函数）。特征是**高相对扇入 + 低扇出**——很多主线在此healthily
-  交汇是**极佳的架构健康状态**，应标记为金色换乘站，**不是污染**。
-- **[pollution 危险职责污染]**：某主线的**私有中间加工结果 (intermediate / processor)**
-  被另一条主线**绕过稳定接口直接摄取**（半成品泄漏）。特征是**低相对扇入**且被当作中间环节。
-- **[god-node 上帝节点]**：**高相对扇入 + 高扇出**，伪装成基建的「烂代码中心」，既被很多人
-  依赖又依赖很多人，牵一发动全身。
+  （如幂等校验、节点展开函数）。特征是**高相对扇入 + 低扇出 + 被很多调用者复用**。
+  很多主线在此交汇是**极佳的架构健康状态**，金色换乘站，**不是污染**。
+- **[pollution 危险职责污染]**：某主线的**私有中间加工结果**被另一条主线**绕过稳定接口、
+  伸进该主线的处理链路里直接摄取**（半成品泄漏）。关键不在「被两条线调用」，而在
+  **一条线本应消费稳定产物，却复制/截取了另一条线的内部中间步骤**。
+- **[god-node 上帝节点]**：**高相对扇入 + 高扇出**，伪装成基建的「烂代码中心」，
+  既被很多人依赖又依赖很多人，牵一发动全身。
 
-# 归属权联合判断（务必结合下列指标，不要只看角色）
-1. **相对扇入 (relative fan-in)** 高 ⇒ 是公共枢纽候选；低 ⇒ 是某主线私有环节候选。
-2. **绝对扇出 (fan-out)** 高 ⇒ 耦合重，公共枢纽要警惕滑向 god-node。
-3. **可见性 (visibility)**：私有实现（`_` 前缀 / 某主线专属）被跨线摄取 ⇒ 偏 pollution；
-   公共 API 被复用 ⇒ 偏 shared-utility / healthy-seam。
-经验法则：**先看中心度**——高相对扇入的节点优先归入 shared-utility(低扇出) 或 god-node(高扇出)；
-只有**低相对扇入**的私有中间环节被跨线摄取才判 pollution；全为 Sink 即 healthy-seam。
+# 数据流分析（核心方法，先做这一步再下结论）
+你会拿到**每条主线追踪到本节点的路径**、本节点的**调用者 (callers) 与下游 (callees)**、
+结构指标与可见性。据此推断**可能的数据流**，回答两个关键问题：
+1. **是「共享公共依赖」还是「私有半成品泄漏」？**
+   - 若两条主线**各自从自己的入口独立地、浅层地**到达本节点（它是大家共用的基建/启动/
+     工具步骤）⇒ healthy-seam（稳定/公共步骤）或 shared-utility（高复用原语）。
+   - 若一条主线在自己链路**深处**建立/加工出本节点的结果，另一条主线**绕过稳定接口伸进来
+     摄取这个中间结果**（本可改用对方暴露的稳定产物）⇒ pollution。
+2. **中心度佐证**：高相对扇入+低扇出 ⇒ 偏公共枢纽；低相对扇入+被当作某线私有中间环节
+   ⇒ 偏 pollution。指标是**佐证**，最终以数据流语义判断为准。
 
 # 输出（严格 JSON，无多余文字）
 {"verdict": "healthy-seam" | "shared-utility" | "pollution" | "god-node",
- "description": "<一句中文说明，点明中心度/扇出/谁摄取了什么>"}
+ "description": "<一句中文：先说数据流（谁经由什么路径到达、是否绕过稳定接口），再给结论>"}
 """
+
+
+@dataclass
+class Provenance:
+    """Data-flow evidence for one crossing: each mainline's traced path to the
+    node, plus the node's direct callers and callees."""
+    callers: list[str]
+    callees: list[str]
+    paths: dict[str, list[str]]
 
 
 @dataclass
@@ -123,8 +137,9 @@ class ReviewAgent:
         is_private = _looks_private(name, node_id)
 
         snippet = await self._snippet(node_id)
+        provenance = await self._provenance(node_id, [f for f, _ in roles])
         verdict, description = await self._classify(
-            name, snippet, roles, metrics, hub_class, is_private
+            name, snippet, roles, metrics, hub_class, is_private, provenance
         )
 
         self.blackboard.record_verdict(node_id, verdict, description)
@@ -138,6 +153,45 @@ class ReviewAgent:
             return await self.probe.node_metrics(node_id)
         except Exception:  # noqa: BLE001 - metrics are best-effort; backstop still runs
             return None
+
+    async def _provenance(self, node_id: str, flows: list[str]) -> "Provenance":
+        """Gather data-flow evidence the LLM reasons over: each mainline's traced
+        path *to* this node (how the data arrived), plus the node's direct
+        callers and callees. This is what tells 'a shared dependency both lines
+        independently call' from 'one line tapping another's private chain'."""
+        callers = await self._neighbors(node_id, incoming=True)
+        callees = await self._neighbors(node_id, incoming=False)
+        paths: dict[str, list[str]] = {}
+        for flow in flows:
+            names: list[str] = []
+            for nid in self.blackboard.nodes_for_flow(flow):
+                node = self.blackboard.get_node(nid)
+                names.append(node.name if node else nid.rsplit(".", 1)[-1])
+                if nid == node_id:
+                    break
+            paths[flow] = names
+        return Provenance(callers=callers, callees=callees, paths=paths)
+
+    async def _neighbors(self, node_id: str, *, incoming: bool) -> list[str]:
+        """Direct caller (or callee) short-names of a node, with a module tag."""
+        pat = (f"(s)-[:CALLS]->(t {{qualified_name:'{node_id}'}})" if incoming
+               else f"(t {{qualified_name:'{node_id}'}})-[:CALLS]->(s)")
+        cypher = f"MATCH {pat} RETURN DISTINCT s.qualified_name AS qn, s.name AS name LIMIT 12"
+        try:
+            from codemap.agents.worker import _as_dict
+
+            data = _as_dict(await self.mcp.query_graph(self.project, query=cypher))
+            cols = data.get("columns") or []
+            rows = [dict(zip(cols, r)) for r in data.get("rows", [])]
+        except Exception:  # noqa: BLE001
+            return []
+        out: list[str] = []
+        for r in rows:
+            qn = r.get("qn") or ""
+            short = r.get("name") or qn.rsplit(".", 1)[-1]
+            mod = qn.rsplit(".", 2)[-2] if qn.count(".") >= 2 else ""
+            out.append(f"{short}({mod})" if mod else short)
+        return out
 
     async def _snippet(self, node_id: str) -> str:
         try:
@@ -166,7 +220,7 @@ class ReviewAgent:
 
     async def _classify(self, name: str, snippet: str, roles: list[tuple[str, str]],
                         metrics: NodeMetrics | None, hub_class: str,
-                        is_private: bool) -> tuple[str, str]:
+                        is_private: bool, provenance: "Provenance | None" = None) -> tuple[str, str]:
         det_verdict = self._deterministic(roles, hub_class)
 
         role_lines = "\n".join(f"  - 主线 {flow}: 角色={role}" for flow, role in roles)
@@ -175,27 +229,44 @@ class ReviewAgent:
             f"  相对扇入 rel_fan_in={m.rel_fan_in:.4f} (fan_in={m.fan_in}, S={m.system_size})\n"
             f"  绝对扇出 fan_out={m.fan_out}\n"
             f"  结构判定 hub_class={hub_class}\n"
-            if m else "  (指标不可用，依据角色与可见性判断)\n"
+            if m else "  (指标不可用，依据数据流与可见性判断)\n"
         )
+        prov_lines = ""
+        if provenance:
+            path_lines = "\n".join(
+                f"    - {flow}: {' → '.join(path) or '(空)'}"
+                for flow, path in provenance.paths.items()
+            )
+            prov_lines = (
+                "[数据流证据 / Provenance]\n"
+                "  各主线追踪到本节点的路径（数据如何抵达此处）:\n"
+                f"{path_lines}\n"
+                f"  本节点的直接调用者 callers: {', '.join(provenance.callers) or '(无)'}\n"
+                f"  本节点的下游 callees: {', '.join(provenance.callees) or '(无)'}\n"
+            )
         window = (
             f"[交叉节点]: {name}\n"
             f"[可见性]: {'私有实现 (_前缀/专属)' if is_private else '公共 API'}\n"
+            f"{prov_lines}"
             f"[结构指标]:\n{metric_lines}"
             f"[各主线记录的角色]:\n{role_lines}\n\n"
             f"[节点源码]:\n{snippet}\n\n"
-            "[请按四类公民判定该交叉点，并给出中文说明]"
+            "[请先分析数据流，再按四类公民判定该交叉点，给出中文说明]"
         )
         try:
             reply = await asyncio.to_thread(self.llm.chat, REVIEW_SYSTEM_PROMPT, window)
             data = reply.json()
             verdict = data.get("verdict", det_verdict)
-            from codemap.blackboard import VERDICTS
-
             if verdict not in VERDICTS:
                 verdict = det_verdict
             description = data.get("description") or self._default_desc(det_verdict, roles, metrics)
             return verdict, description
-        except Exception:  # noqa: BLE001 - fall back to the deterministic rule
+        except Exception as exc:  # noqa: BLE001 - fall back to the deterministic rule
+            import os
+            if os.getenv("CODEMAP_DEBUG"):
+                import traceback
+                print(f"[review LLM fallback] {type(exc).__name__}: {exc}")
+                traceback.print_exc()
             return det_verdict, self._default_desc(det_verdict, roles, metrics)
 
     @staticmethod
