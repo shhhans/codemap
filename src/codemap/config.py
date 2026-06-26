@@ -70,6 +70,13 @@ class Config:
     fanout_high: int = field(
         default_factory=lambda: int(os.getenv("CODEMAP_FANOUT_HIGH", "8"))
     )
+    # Absolute fan-in floor for hub classification: a node must have at least
+    # this many callers to count as shared infrastructure, regardless of its
+    # (scale-free) relative score — guards against the Concordia metric
+    # degenerating on tiny codebases. See metrics.classify_hub.
+    fanin_min: int = field(
+        default_factory=lambda: int(os.getenv("CODEMAP_FANIN_MIN", "4"))
+    )
 
     def llm(self, provider: str | None = None) -> LLMConfig:
         """Resolve the LLM endpoint config for `provider` (defaults to llm_provider)."""

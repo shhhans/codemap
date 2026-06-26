@@ -44,19 +44,32 @@ def test_relative_fan_in_is_scale_free() -> None:
 
 # ── Hub classification ──────────────────────────────────────────────────────
 def test_classify_hub_shared_utility() -> None:
-    # central but low coupling → a healthy shared primitive
-    assert classify_hub(0.2, 2, rel_high=0.08, fanout_high=8) == SHARED_UTILITY
+    # central but low coupling, with real breadth → a healthy shared primitive
+    assert classify_hub(0.2, 2, rel_high=0.08, fanout_high=8,
+                        fan_in=40, fanin_min=4) == SHARED_UTILITY
 
 
 def test_classify_hub_god_node() -> None:
     # central AND high coupling → infra-disguised mess
-    assert classify_hub(0.2, 15, rel_high=0.08, fanout_high=8) == GOD_NODE
+    assert classify_hub(0.2, 15, rel_high=0.08, fanout_high=8,
+                        fan_in=40, fanin_min=4) == GOD_NODE
 
 
 def test_classify_hub_ordinary() -> None:
     # not central → not a hub at all (pollution decided elsewhere)
     assert classify_hub(0.01, 1, rel_high=0.08, fanout_high=8) == ORDINARY
     assert classify_hub(0.01, 20, rel_high=0.08, fanout_high=8) == ORDINARY
+
+
+def test_classify_hub_absolute_breadth_gate() -> None:
+    # The tiny-fixture misfire: Concordia degenerates at small S so rel_fan_in
+    # blows up (1.44), but a node reached by only 2 callers is NOT a hub. The
+    # absolute floor keeps it ORDINARY so the pollution case stays pollution.
+    assert classify_hub(1.44, 1, rel_high=0.08, fanout_high=8,
+                        fan_in=2, fanin_min=4) == ORDINARY
+    # crossing the floor restores hub classification
+    assert classify_hub(1.44, 1, rel_high=0.08, fanout_high=8,
+                        fan_in=4, fanin_min=4) == SHARED_UTILITY
 
 
 def test_node_metrics_rel_fan_in_property() -> None:

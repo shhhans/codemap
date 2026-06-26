@@ -94,6 +94,7 @@ class ReviewAgent:
     project: str
     rel_fanin_high: float = field(default_factory=lambda: config.rel_fanin_high)
     fanout_high: int = field(default_factory=lambda: config.fanout_high)
+    fanin_min: int = field(default_factory=lambda: config.fanin_min)
     probe: MetricsProbe | None = None
 
     def __post_init__(self) -> None:
@@ -115,7 +116,8 @@ class ReviewAgent:
         metrics = await self._metrics(node_id)
         hub_class = (
             classify_hub(metrics.rel_fan_in, metrics.fan_out,
-                         rel_high=self.rel_fanin_high, fanout_high=self.fanout_high)
+                         rel_high=self.rel_fanin_high, fanout_high=self.fanout_high,
+                         fan_in=metrics.fan_in, fanin_min=self.fanin_min)
             if metrics else ORDINARY
         )
         is_private = _looks_private(name, node_id)

@@ -198,8 +198,16 @@ V2 的核心突破：从纯数据流追踪，升级为带**架构所有权 (Owne
   > `build_window` 仍补回。
 - **V2-M2 相对扇入/出** ✅：[`src/codemap/metrics.py`](./src/codemap/metrics.py)。Concordia
   无量纲公式 `相对扇入 = Fan-in/(S·ln S)`（S=文件/类数，缺标签时回退总节点数），消除项目
-  规模差异；`classify_hub` 据「相对扇入 × 绝对扇出」给出 SHARED_UTILITY / GOD_NODE /
-  ORDINARY。阈值 `CODEMAP_REL_FANIN_HIGH` / `CODEMAP_FANOUT_HIGH` 可校准。
+  规模差异；`classify_hub` 据「相对扇入 × 绝对扇出 × **绝对扇入下限**」给出 SHARED_UTILITY /
+  GOD_NODE / ORDINARY。阈值 `CODEMAP_REL_FANIN_HIGH` / `CODEMAP_FANOUT_HIGH` /
+  `CODEMAP_FANIN_MIN` 可校准。
+
+  > **实测校准（真实 LLM 狗粮发现）**：Concordia 公式在**极小仓库**退化——S≈2 时，只被 2 条
+  > 线调用的节点 `相对扇入≈1.44` 就爆表，导致 fixture 里**故意构造的污染案例 `parse_jwt`
+  > 被镀金成「公共枢纽」**。修复不是调阈值，而是加**绝对扇入下限 `fanin_min`（默认 4）**：
+  > 真正的公共枢纽既要相对中心度高、也要绝对调用面广；只被两条线调用的节点无论仓库多小都不算
+  > 系统级基建。加下限后 `parse_jwt` 正确回落为 `pollution`、`get_current_user`（sink）为
+  > `healthy-seam`。
 - **V2-M3 四态评审** ✅：[`agents/review.py`](./src/codemap/agents/review.py) 升级为**归属权
   联合判断**（相对扇入 × 扇出 × 可见性），verdict 由两态扩为四态：
   `healthy-seam` / `shared-utility` / `pollution` / `god-node`。确定性兜底**先看中心度**——

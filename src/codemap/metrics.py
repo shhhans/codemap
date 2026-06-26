@@ -72,13 +72,26 @@ def classify_hub(
     *,
     rel_high: float,
     fanout_high: int,
+    fan_in: int | None = None,
+    fanin_min: int = 0,
 ) -> str:
-    """Structural ownership class from relative fan-in + absolute fan-out.
+    """Structural ownership class from fan-in (relative + absolute) and fan-out.
 
+      • fan_in < fanin_min                              → ORDINARY (breadth gate)
       • rel_fan_in ≥ rel_high and fan_out  < fanout_high → SHARED_UTILITY
       • rel_fan_in ≥ rel_high and fan_out ≥ fanout_high → GOD_NODE
       • rel_fan_in <  rel_high                          → ORDINARY
+
+    A hub needs BOTH scale-free centrality *and* absolute breadth. The Concordia
+    relative score degenerates on tiny codebases — with S≈2 a node reached by
+    just two callers scores >1 — so without an absolute floor every crossing in a
+    small repo masquerades as a 'shared utility' (this misfired on the auth/
+    billing fixture, gilding the very pollution case it was built to expose). A
+    node reached by only a couple of callers is not system-level infrastructure,
+    however small the repo makes its relative score.
     """
+    if fan_in is not None and fan_in < fanin_min:
+        return ORDINARY
     if rel_fan_in >= rel_high:
         return GOD_NODE if fan_out >= fanout_high else SHARED_UTILITY
     return ORDINARY
