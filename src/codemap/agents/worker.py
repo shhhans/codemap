@@ -21,7 +21,13 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from codemap.blackboard import Blackboard, Node, Trace
-from codemap.filtering import classify_boundary, is_global_noise, parse_stub_modules
+from codemap.filtering import (
+    StubModules,
+    classify_boundary,
+    is_global_noise,
+    parse_stub_modules,
+    stub_call_names,
+)
 from codemap.llm import LLMClient
 from codemap.mcp_client import CodebaseMemoryClient
 from codemap.prompts import SYSTEM_PROMPT, Candidate, build_window
@@ -52,6 +58,12 @@ class TaintWorker:
     retained: list[RetainedNode] = field(default_factory=list)
     pruned: list[tuple[str, str, str]] = field(default_factory=list)  # (name, verdict, reason)
     _seen: set[str] = field(default_factory=set)
+    # Per-module imported-module cache + the project's Module qualified-names
+    # (resolved once). Imports live at file scope, not in a node's body, so
+    # stubbing reads the file's Module node, found by longest-prefix match.
+    _file_stubs: dict[str, StubModules] = field(default_factory=dict)
+    _module_qns: list[str] | None = None
+    _internal_segs: set[str] | None = None
 
     async def trace(self, seed_qualified_name: str) -> list[RetainedNode]:
         """Run the DFS from `seed_qualified_name` and return the retained path."""
@@ -85,11 +97,13 @@ class TaintWorker:
         if depth >= self.max_depth:
             return []
 
-        # Fetch the node's source once: it feeds both import-aware stubbing and
-        # the dynamic-dispatch recovery below.
-        source = await self._node_source(qualified_name)
-        stubs = parse_stub_modules(source) if source else None
-        candidates = await self._downstream(qualified_name, source)
+        # Fetch the node's snippet once (body source + file path), then resolve
+        # the file's imports for stubbing. Imports are file-scoped, so stubbing
+        # reads the file's Module node — not this node's body.
+        snip = await self._node_snippet(qualified_name)
+        source = snip.get("source") or ""
+        stubs = await self._file_imports(qualified_name)
+        candidates = await self._downstream(qualified_name, source, stubs)
         if not candidates:
             return []
 
@@ -99,7 +113,7 @@ class TaintWorker:
         normal: list[Candidate] = []
         children: list[tuple[str, int]] = []
         for c in candidates:
-            if stubs and (stubs.is_stub_call(c.ref) or stubs.is_stub_call(c.name)):
+            if stubs.is_stub_call(c.ref) or stubs.is_stub_call(c.name):
                 # Stub boundary takes precedence: a qualified external call like
                 # `requests.get` must not be dropped just because its short name
                 # (`get`) collides with the global blacklist.
@@ -140,15 +154,75 @@ class TaintWorker:
         return children
 
     # ── MCP queries ──────────────────────────────────────────────────────────
+    async def _node_snippet(self, qualified_name: str) -> dict[str, Any]:
+        """Fetch the node's snippet dict (body source + file_path; {} if absent)."""
+        try:
+            return _as_dict(await self.mcp.get_code_snippet(self.project, qualified_name))
+        except Exception:  # noqa: BLE001 - a missing snippet shouldn't kill the walk
+            return {}
+
     async def _node_source(self, qualified_name: str) -> str:
         """Fetch the node's body source (empty string if unavailable)."""
-        try:
-            snip = _as_dict(await self.mcp.get_code_snippet(self.project, qualified_name))
-        except Exception:  # noqa: BLE001 - a missing snippet shouldn't kill the walk
-            return ""
-        return snip.get("source") or ""
+        return (await self._node_snippet(qualified_name)).get("source") or ""
 
-    async def _downstream(self, qualified_name: str, source: str = "") -> list[Candidate]:
+    async def _module_qualified_names(self) -> list[str]:
+        """All Module qualified-names in the project, longest first (cached).
+
+        Module nodes don't carry a usable file_path property, so we match a
+        node to its file by longest-prefix over these instead."""
+        if self._module_qns is None:
+            try:
+                rows = self._rows(await self.mcp.query_graph(
+                    self.project, query="MATCH (m:Module) RETURN m.qualified_name AS qn"))
+                self._module_qns = sorted(
+                    (r.get("qn") for r in rows if r.get("qn")), key=len, reverse=True)
+            except Exception:  # noqa: BLE001
+                self._module_qns = []
+        return self._module_qns
+
+    async def _file_imports(self, qualified_name: str) -> StubModules:
+        """Imported modules of the file containing ``qualified_name`` (cached).
+
+        Imports sit at file scope, not in a node's body, so we resolve the
+        node's Module (the longest Module qualified-name that prefixes it) and
+        parse *its* source. The graph indexes only repo-internal symbols
+        (verified by the M1 probe), so this is the only place third-party calls
+        are observable — it lets stubbing guard the source-regex recovery
+        against phantom edges on library method names.
+        """
+        module_qn = next(
+            (m for m in await self._module_qualified_names()
+             if qualified_name == m or qualified_name.startswith(m + ".")),
+            None,
+        )
+        if not module_qn:
+            return StubModules()
+        if module_qn in self._file_stubs:
+            return self._file_stubs[module_qn]
+        stubs = StubModules()
+        try:
+            msnip = _as_dict(await self.mcp.get_code_snippet(self.project, module_qn))
+            parsed = parse_stub_modules(msnip.get("source") or "")
+            # Drop the project's own packages: they import like libraries but
+            # resolve to internal, traceable nodes.
+            stubs = parsed.externals_only(await self._internal_roots())
+        except Exception:  # noqa: BLE001 - stubbing is best-effort
+            stubs = StubModules()
+        self._file_stubs[module_qn] = stubs
+        return stubs
+
+    async def _internal_roots(self) -> set[str]:
+        """Top-level package/module segments that exist in the indexed graph —
+        i.e. the project's own (first-party) import roots (cached)."""
+        if self._internal_segs is None:
+            segs: set[str] = set()
+            for m in await self._module_qualified_names():
+                segs.update(m.split("."))
+            self._internal_segs = segs
+        return self._internal_segs
+
+    async def _downstream(self, qualified_name: str, source: str = "",
+                          stubs: StubModules | None = None) -> list[Candidate]:
         """1-hop downstream callees + their signatures.
 
         Uses query_graph keyed on the exact qualified_name (not trace_path's
@@ -177,7 +251,7 @@ class TaintWorker:
             out.append(Candidate(ref=qn, name=short,
                                  signature=sig.text, file_path=sig.file_path))
 
-        out.extend(await self._recover_dynamic(qualified_name, seen, source))
+        out.extend(await self._recover_dynamic(qualified_name, seen, source, stubs))
         return out
 
     # ── M1 boundary handling (third-party stubs) ─────────────────────────────
@@ -209,7 +283,7 @@ class TaintWorker:
             return 0
 
     async def _recover_dynamic(self, qualified_name: str, already: set[str],
-                               source: str = "") -> list[Candidate]:
+                               source: str = "", stubs: StubModules | None = None) -> list[Candidate]:
         """Recover dynamic-dispatch callees the static graph dropped.
 
         The static call graph cannot resolve calls like ``worker.expand_one()``
@@ -217,6 +291,10 @@ class TaintWorker:
         read the node's source, pull the called names, and for any name that
         maps to exactly one Function/Method in the graph (so it's unambiguous),
         add it as a recovered, lower-confidence candidate.
+
+        Third-party method calls (``np.dot(...)``) are excluded via import-aware
+        stubbing: their bare attr name (``dot``) must not be name-matched to a
+        coincidentally unique internal ``dot()`` — that would be a phantom edge.
         """
         import re
 
@@ -225,9 +303,14 @@ class TaintWorker:
         if not source:
             return []
         own = qualified_name.rsplit(".", 1)[-1]
+        # File-level imports (from expand_one) tell us which call sites in this
+        # body are third-party (e.g. `np.dot`) so we don't name-match their bare
+        # attr to a coincidentally-unique internal node.
+        stub_names = stub_call_names(source, stubs or StubModules())
         names = {
             n for n in re.findall(r"([A-Za-z_]\w*)\s*\(", source)
             if n != own and not is_global_noise(n) and not n.startswith("__")
+            and n not in stub_names
         }
         out: list[Candidate] = []
         for name in names:

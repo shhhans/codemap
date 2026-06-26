@@ -32,6 +32,7 @@ unit-testable offline.
 from __future__ import annotations
 
 import ast
+import re
 import sys
 from dataclasses import dataclass, field
 
@@ -132,6 +133,22 @@ class StubModules:
         root = self.root_of(ref)
         return root is not None and root not in PYTHON_STDLIB_ROOTS
 
+    def externals_only(self, first_party_roots: set[str]) -> "StubModules":
+        """A copy with first-party imports removed.
+
+        The project's *own* top-level packages (e.g. ``codemap``) are imported
+        like any other module but resolve to internal, traceable nodes — they
+        must not be stubbed. Callers pass the set of package roots that exist in
+        the indexed graph so only genuine external (stdlib/third-party) modules
+        remain.
+        """
+        keep = self.roots - first_party_roots
+        return StubModules(
+            roots=set(keep),
+            aliases={a: r for a, r in self.aliases.items() if r in keep},
+            from_bindings={n: r for n, r in self.from_bindings.items() if r in keep},
+        )
+
 
 def parse_stub_modules(source: str) -> StubModules:
     """Parse a Python source file's imports into a :class:`StubModules`.
@@ -188,6 +205,30 @@ def _parse_imports_line_fallback(source: str) -> StubModules:
             stub.aliases.update(merged.aliases)
             stub.from_bindings.update(merged.from_bindings)
     return stub
+
+
+_DOTTED_CALL = re.compile(r"\b([A-Za-z_]\w*)\s*\.\s*([A-Za-z_]\w*)\s*\(")
+
+
+def stub_call_names(source: str, stubs: StubModules) -> set[str]:
+    """Short call names in ``source`` that belong to an imported stub module.
+
+    Empirically (see the M1 probe) Codebase-Memory indexes only repo-internal
+    symbols, so a third-party call like ``np.dot(x)`` never becomes a graph node
+    — but its *bare* attribute name (``dot``) is still pulled out by the
+    source-regex recovery path, where it can collide with a unique internal
+    ``dot()`` and produce a phantom edge. This returns those attribute names
+    (plus bare ``from``-import bindings) so recovery can skip them.
+
+    Example: with ``import numpy as np``, ``np.dot(x)`` → ``{"dot"}``.
+    """
+    names: set[str] = set()
+    for head, attr in _DOTTED_CALL.findall(source):
+        if stubs.root_of(head) is not None:  # head is an imported module/alias
+            names.add(attr)
+    # Bare names bound by `from numpy import array` are stub calls with no prefix.
+    names |= set(stubs.from_bindings)
+    return names
 
 
 # ── 3. Boundary classification (Sink vs Dual) ───────────────────────────────

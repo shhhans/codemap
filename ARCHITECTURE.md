@@ -185,6 +185,17 @@ V2 的核心突破：从纯数据流追踪，升级为带**架构所有权 (Owne
   Dual（有出边，继续追踪）**。存根判别对「图引擎是否索引外部符号」两种情况都成立。
   接入 `TaintWorker.expand_one`：存根边界绕过 LLM，且**存根判定优先于短名黑名单**
   （`requests.get` 不会因短名 `get` 被误剪）。
+
+  > **实测校准（v0.8.1 真实图谱）**：用 `query_graph` 实测确认 Codebase-Memory **只索引仓库
+  > 自身符号**——第三方/标准库调用（如 `asyncio.to_thread`）根本不进图（既非节点也非边）。
+  > 故图层的存根分区在本引擎是**良性 no-op**（为其它引擎预留）；存根在本引擎的**真实价值在
+  > 动态补边路径**：源码正则会提取 `np.dot(x)` 的裸名 `dot`，若仓库恰有唯一内部 `dot()` 就会
+  > 补出**幻象边**。修复：(a) import 是**文件级**的（不在函数体里），故按节点 qualified_name 的
+  > **最长前缀**定位其 `Module` 节点、解析该文件源码的 import（按文件缓存）；(b) 用
+  > `externals_only` **剔除项目自身的一方包**（如 `codemap`，它 import 起来像库但解析到内部可追节点），
+  > 只保留真正的外部模块；(c) `stub_call_names` 据此把外部方法裸名排除出补边，内部调用
+  > （如 `build_window`）照常可追。实测 `worker._classify`：外部根=stdlib、`to_thread` 被排除、
+  > `build_window` 仍补回。
 - **V2-M2 相对扇入/出** ✅：[`src/codemap/metrics.py`](./src/codemap/metrics.py)。Concordia
   无量纲公式 `相对扇入 = Fan-in/(S·ln S)`（S=文件/类数，缺标签时回退总节点数），消除项目
   规模差异；`classify_hub` 据「相对扇入 × 绝对扇出」给出 SHARED_UTILITY / GOD_NODE /

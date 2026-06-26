@@ -14,6 +14,7 @@ from codemap.filtering import (
     classify_boundary,
     is_global_noise,
     parse_stub_modules,
+    stub_call_names,
 )
 
 
@@ -75,6 +76,40 @@ def test_syntax_error_falls_back_to_line_scan() -> None:
     src = "import requests\ndef broken(:\n    pass\n"
     stubs = parse_stub_modules(src)
     assert "requests" in stubs.roots
+
+
+# ── Stub call-name extraction (guards source-regex recovery) ────────────────
+def test_stub_call_names_picks_third_party_methods() -> None:
+    src = "import numpy as np\n\ndef f(x):\n    return np.dot(x, x) + np.sum(x)\n"
+    stubs = parse_stub_modules(src)
+    assert stub_call_names(src, stubs) == {"dot", "sum"}
+
+
+def test_stub_call_names_ignores_internal_receivers() -> None:
+    # self.method() / worker.expand_one() are not stub calls — keep them traceable.
+    src = ("import numpy as np\n\ndef f(self, worker):\n"
+           "    self.helper()\n    worker.expand_one()\n    np.array([1])\n")
+    names = stub_call_names(src, parse_stub_modules(src))
+    assert "array" in names
+    assert "helper" not in names and "expand_one" not in names
+
+
+def test_stub_call_names_includes_from_bindings() -> None:
+    src = "from numpy import dot\n\ndef f(x):\n    return dot(x, x)\n"
+    assert "dot" in stub_call_names(src, parse_stub_modules(src))
+
+
+def test_externals_only_drops_first_party_packages() -> None:
+    # `codemap` is the project's own package — it imports like a library but is
+    # internal and must not be stubbed; numpy/os remain external.
+    src = "import numpy as np\nimport os\nfrom codemap.prompts import build_window\n"
+    stubs = parse_stub_modules(src).externals_only({"codemap", "src", "tests"})
+    assert "numpy" in stubs.roots and "os" in stubs.roots
+    assert "codemap" not in stubs.roots
+    # the first-party binding is no longer treated as a stub call → stays traceable
+    assert stubs.root_of("build_window") is None
+    assert "build_window" not in stub_call_names(src, stubs)
+    assert "dot" not in stub_call_names("np.dot(x)", stubs) or stubs.root_of("np") == "numpy"
 
 
 # ── Boundary classification ─────────────────────────────────────────────────
