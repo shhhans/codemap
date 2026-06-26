@@ -140,8 +140,12 @@ Agent 最终输出一张用于渲染"地铁图"的 JSON 地图。权威 JSON Sch
   入口 `milestones/m2_single_dfs.py` 从 Seed 跑通单主线剪枝并打印地铁站点路径。
   MCP 侧（索引→search_graph→trace_path→get_code_snippet→DFS→Blackboard）已用真实数据
   端到端验证；真实 MiniMax 调用待 key 注入后联调。
-- **M3 全局黑板与并发分叉**：引入 SQLite 黑板 + `log_trace`；实现分叉 Fork 与多 Agent
-  并发；构造含"危险交叉"的假代码测试自动报警。
+- **M3 全局黑板与并发分叉** ✅（真实 LLM 跑通）：`agents/coordinator.py` 用 asyncio 队列 +
+  bounded worker 池并发驱动多主线，节点展开产生多个子节点即 Fork（独立入队，并发处理）；
+  `agents/review.py` 评审 Agent 给交叉点定性（健康 vs 职责污染），结果落 `intersection_verdicts`。
+  fixture `fixtures/sample_app/`（Auth + Billing 双线）刻意制造危险交叉 `parse_jwt`（被两线当作
+  中间环节摄取）与健康交叉 `get_current_user`（稳定沉淀点）。入口 `milestones/m3_concurrent.py`
+  实测：`charge()` 处 Fork 2 worker，自动报警 `parse_jwt` 为职责污染，并渲染地铁图标红。
 - **M4 界面可视化与自我解析**：导出 SQLite → JSON 契约 → 极简 HTML 地铁图；解析自身
   Python 源码完成狗粮验证。
 

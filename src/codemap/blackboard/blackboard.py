@@ -144,6 +144,19 @@ class Blackboard:
             (line_id, flow_type, name, color),
         )
 
+    def roles_for_node(self, node_id: str) -> list[tuple[str, str]]:
+        """Per-flow roles recorded for a node: [(flow_type, node_role), ...].
+
+        Drives intersection health: a node logged as 'processor' (intermediate
+        step) by some mainline, yet crossed by another, is responsibility
+        pollution; one that is a 'sink' for all is a healthy crossing.
+        """
+        rows = self._conn.execute(
+            "SELECT flow_type, node_role FROM traces WHERE node_id = ? ORDER BY flow_type",
+            (node_id,),
+        ).fetchall()
+        return [(r["flow_type"], r["node_role"]) for r in rows]
+
     def nodes_for_flow(self, flow_type: str) -> list[str]:
         rows = self._conn.execute(
             "SELECT node_id FROM traces WHERE flow_type = ? ORDER BY depth, id",

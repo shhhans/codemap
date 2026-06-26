@@ -44,9 +44,9 @@
 | Milestone | 目标 | 状态 |
 |-----------|------|------|
 | **M1** 基础设施连通 | Python 经 MCP 连上 Codebase-Memory，固化工具契约 | ✅ 完成 (v0.8.1 实测) |
-| **M2** 单线 DFS 追踪 | System Prompt + 滑动窗口，硬编码 Seed 跑通单主线剪枝 | ✅ 已实现 (待真实 LLM 联调) |
-| **M3** 黑板与并发分叉 | SQLite 黑板 + `log_trace` + Fork，构造危险交叉并报警 | ⬜ |
-| **M4** 可视化与狗粮 | 导出 JSON 契约 → HTML 地铁图，解析自身源码 | ⬜ |
+| **M2** 单线 DFS 追踪 | System Prompt + 滑动窗口，硬编码 Seed 跑通单主线剪枝 | ✅ 真实 MiniMax-M3 跑通 |
+| **M3** 黑板与并发分叉 | SQLite 黑板 + `log_trace` + Fork，构造危险交叉并报警 | ✅ 真实 LLM 跑通 |
+| **M4** 可视化与狗粮 | 导出 JSON 契约 → HTML 地铁图，解析自身源码 | 🚧 可视化已就绪 |
 
 ## 快速开始
 
@@ -67,6 +67,12 @@ python -m codemap.milestones.llm_check
 # 5. Milestone 2：单线 DFS 污点追踪（默认 dogfood 解析本仓库）
 python -m codemap.milestones.m2_single_dfs \
     --seed main --flow Trace --material "MCP request"
+
+# 6. Milestone 3：双主线并发 + Fork + 危险交叉报警（解析 fixtures/sample_app）
+python -m codemap.milestones.m3_concurrent
+
+# 7. 渲染地铁图（危险交叉会标红，健康交叉标绿）
+python scripts/render_subway.py web/subway_map.png
 ```
 
 ## 配置项
