@@ -34,18 +34,20 @@
 const SVG = "http://www.w3.org/2000/svg";
 const TYPE_LABEL = { source:"源头 Source", processor:"加工站 Processor", sink:"沉淀点 Sink", barrier:"防爆墙 Barrier" };
 
-// V2 four-citizen verdicts. Two healthy convergences collapse into a merged
-// interchange (green seam / gold hub); two unhealthy ones draw an off-mainline
-// red connector (职责污染 / 上帝节点).
-const GOLD = "#f5c518", GREEN = "#28c76f", RED = "#ff4d4f";
-const isHealthyCrossing = v => v === "healthy-seam" || v === "shared-utility";
+// V2.1 five-citizen verdicts. Three healthy convergences collapse into a merged
+// interchange — green seam / gold heavy hub / teal lightweight pass-through
+// filter (folded, drawn small, never a heavy station); two unhealthy ones draw
+// an off-mainline red connector (职责污染 / 上帝节点).
+const GOLD = "#f5c518", GREEN = "#28c76f", RED = "#ff4d4f", TEAL = "#34d3c0";
+const isHealthyCrossing = v => v === "healthy-seam" || v === "shared-utility" || v === "lightweight-utility";
 const isDanger = v => v === "pollution" || v === "god-node";
-const interchangeColor = v => v === "shared-utility" ? GOLD : GREEN;
+const interchangeColor = v => v === "shared-utility" ? GOLD : v === "lightweight-utility" ? TEAL : GREEN;
 const VERDICT_BADGE = {
-  "healthy-seam":   { text: "✓ 健康接缝", color: GREEN },
-  "shared-utility": { text: "✦ 公共枢纽 · 已飞升", color: GOLD },
-  "pollution":      { text: "⚠ 危险换乘 · 职责污染", color: RED },
-  "god-node":       { text: "☠ 上帝节点 · 高扇入高扇出", color: RED },
+  "healthy-seam":       { text: "✓ 健康接缝", color: GREEN },
+  "shared-utility":     { text: "✦ 公共枢纽 · 已飞升", color: GOLD },
+  "lightweight-utility":{ text: "◇ 轻量透传 · 滤镜", color: TEAL },
+  "pollution":          { text: "⚠ 危险换乘 · 职责污染", color: RED },
+  "god-node":           { text: "☠ 上帝节点 · 高扇入高扇出", color: RED },
 };
 
 function el(name, attrs = {}, parent = null, text = null) {
@@ -146,13 +148,22 @@ function render(data) {
   const n = t => xs.filter(i => i.type === t).length;
   document.getElementById("subtitle").textContent =
     `${data.mainlines.length} 条主线 · ${data.nodes.length} 个站点 · ${xs.length} 个换乘点` +
-    `（${n("shared-utility")} 公共枢纽 / ${n("healthy-seam")} 健康接缝 / ` +
-    `${n("pollution")} 职责污染 / ${n("god-node")} 上帝节点）`;
+    `（${n("shared-utility")} 公共枢纽 / ${n("lightweight-utility")} 轻量透传 / ` +
+    `${n("healthy-seam")} 健康接缝 / ${n("pollution")} 职责污染 / ${n("god-node")} 上帝节点）`;
   buildLegend();
 }
 
 function drawStation(svg, p, node, color, verdict, isMerged) {
   if (isMerged) {
+    // A lightweight pass-through util (透传滤镜) is folded: drawn as a small teal
+    // diamond "filter" inline, never a heavy interchange — it shouldn't read as a
+    // big station that breaks the mainline.
+    if (verdict === "lightweight-utility") {
+      el("rect", { x: p.x - 8, y: p.y - 8, width: 16, height: 16, rx: 2,
+                   transform: `rotate(45 ${p.x} ${p.y})`,
+                   fill: "#171a21", stroke: TEAL, "stroke-width": 4 }, svg);
+      return;
+    }
     // classic interchange: white capsule both lines pass through. A shared
     // utility (已飞升公共枢纽) gets a gold ring; a stable seam gets green.
     el("circle", { cx: p.x, cy: p.y, r: 19, fill: "#fff", stroke: "#0f1115", "stroke-width": 4 }, svg);
@@ -206,6 +217,7 @@ function buildLegend() {
     ["沉淀点 Sink (方块)", "swatch sq", "#3366FF", null],
     ["健康接缝 (白点·绿环)", "swatch", "#fff", GREEN],
     ["✦ 公共枢纽 / 已飞升 (白点·金环)", "swatch", "#fff", GOLD],
+    ["◇ 轻量透传滤镜 (青色小菱形)", "swatch sq", TEAL, null],
     ["⚠ 职责污染 (红环·主线外红虚线)", "swatch", RED, null],
     ["☠ 上帝节点 · 高扇入高扇出 (红)", "swatch", RED, null],
   ];

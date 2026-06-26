@@ -79,6 +79,8 @@ def board(tmp_path: Path) -> Blackboard:
     crossing("m.expand", "expand_one", "processor", "processor")
     # God node: central AND highly coupled.
     crossing("m.god", "do_everything", "processor", "processor")
+    # Lightweight pass-through: central but ZERO fan-out (a leaf formatter).
+    crossing("m.fmt", "format_date", "processor", "processor")
     # Stable seam: a sink for both.
     crossing("m.get_user", "get_current_user", "sink", "sink")
     yield bb
@@ -93,6 +95,8 @@ def _verdicts(board: Blackboard) -> dict[str, str]:
         "m.expand": NodeMetrics("m.expand", fan_in=40, fan_out=2, system_size=30),
         # high relative fan-in, high fan-out → god-node
         "m.god": NodeMetrics("m.god", fan_in=40, fan_out=20, system_size=30),
+        # high relative fan-in, ZERO fan-out → lightweight-utility (透传滤镜)
+        "m.fmt": NodeMetrics("m.fmt", fan_in=40, fan_out=0, system_size=30),
         # all-sink → healthy-seam regardless of metrics
         "m.get_user": NodeMetrics("m.get_user", fan_in=5, fan_out=0, system_size=300),
     }
@@ -116,6 +120,11 @@ def test_genuine_private_intermediate_is_pollution(board: Blackboard) -> None:
 
 def test_high_fanin_high_fanout_is_god_node(board: Blackboard) -> None:
     assert _verdicts(board)["m.god"] == "god-node"
+
+
+def test_lightweight_pass_through_is_lightweight_utility(board: Blackboard) -> None:
+    # central but zero fan-out → folded transparent filter, not a heavy hub
+    assert _verdicts(board)["m.fmt"] == "lightweight-utility"
 
 
 def test_all_sink_crossing_is_healthy_seam(board: Blackboard) -> None:

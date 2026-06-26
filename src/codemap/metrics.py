@@ -19,10 +19,11 @@ where ``S`` is the number of structural units (files / classes) in the system.
 This yields a scale-free "how central is this node" number that the ReviewAgent
 combines with absolute fan-out and visibility to assign ownership:
 
-  high rel-fan-in + low  fan-out → 公共枢纽 / Shared Utility (a 已飞升 hub)
-  high rel-fan-in + high fan-out → 上帝节点 / God Node (infra-disguised mess)
-  low  rel-fan-in               → an ordinary node; pollution is decided by
-                                  whether another line taps its private result.
+  high rel-fan-in + moderate fan-out → 公共枢纽 / Heavy Shared Utility (金色大枢纽)
+  high rel-fan-in + zero     fan-out → 透传滤镜 / Lightweight Utility (pass-through leaf)
+  high rel-fan-in + high     fan-out → 上帝节点 / God Node (infra-disguised mess)
+  low  rel-fan-in                    → an ordinary node; pollution is decided by
+                                       whether another line taps its private result.
 
 Pure graph queries; no LLM. The numeric helpers are stdlib-only and unit-tested
 offline, while :class:`MetricsProbe` wraps the MCP graph for live measurement.
@@ -36,9 +37,10 @@ from typing import Any
 
 # Ownership verdicts derived purely from the structural metrics. The ReviewAgent
 # refines these with source + visibility, but they are meaningful on their own.
-SHARED_UTILITY = "shared-utility"   # high centrality, low coupling → 金色枢纽
-GOD_NODE = "god-node"               # high centrality, high coupling → 高危
-ORDINARY = "ordinary"               # not central enough to be a hub either way
+SHARED_UTILITY = "shared-utility"         # high centrality, moderate fan-out → 金色大枢纽
+LIGHTWEIGHT_UTILITY = "lightweight-utility"  # high centrality, ZERO fan-out → 透传滤镜
+GOD_NODE = "god-node"                      # high centrality, high fan-out → 高危上帝节点
+ORDINARY = "ordinary"                      # not central enough to be a hub either way
 
 
 def relative_fan_in(fan_in: int, system_size: int) -> float:
@@ -77,10 +79,11 @@ def classify_hub(
 ) -> str:
     """Structural ownership class from fan-in (relative + absolute) and fan-out.
 
-      • fan_in < fanin_min                              → ORDINARY (breadth gate)
-      • rel_fan_in ≥ rel_high and fan_out  < fanout_high → SHARED_UTILITY
-      • rel_fan_in ≥ rel_high and fan_out ≥ fanout_high → GOD_NODE
-      • rel_fan_in <  rel_high                          → ORDINARY
+      • fan_in < fanin_min                                → ORDINARY (breadth gate)
+      • rel_fan_in ≥ rel_high and fan_out ≥ fanout_high   → GOD_NODE
+      • rel_fan_in ≥ rel_high and fan_out == 0            → LIGHTWEIGHT_UTILITY
+      • rel_fan_in ≥ rel_high and 0 < fan_out < fanout_high → SHARED_UTILITY
+      • rel_fan_in <  rel_high                            → ORDINARY
 
     A hub needs BOTH scale-free centrality *and* absolute breadth. The Concordia
     relative score degenerates on tiny codebases — with S≈2 a node reached by
@@ -89,11 +92,23 @@ def classify_hub(
     billing fixture, gilding the very pollution case it was built to expose). A
     node reached by only a couple of callers is not system-level infrastructure,
     however small the repo makes its relative score.
+
+    Fan-out then splits the central citizens three ways (V2.1 citizen taxonomy):
+    a high-centrality node with *zero* fan-out is a pure pass-through leaf
+    primitive — a Lightweight Utility / 透传滤镜 (``format_date``), to be folded
+    on the map rather than drawn as a heavy interchange; *moderate* fan-out is a
+    genuine Heavy Shared Utility (金色大枢纽 — a conn pool / auth middleware that
+    coordinates several internals); *high* fan-out is a God Node (infra-disguised
+    tangle that both is depended on and depends on everything).
     """
     if fan_in is not None and fan_in < fanin_min:
         return ORDINARY
     if rel_fan_in >= rel_high:
-        return GOD_NODE if fan_out >= fanout_high else SHARED_UTILITY
+        if fan_out >= fanout_high:
+            return GOD_NODE
+        if fan_out == 0:
+            return LIGHTWEIGHT_UTILITY
+        return SHARED_UTILITY
     return ORDINARY
 
 

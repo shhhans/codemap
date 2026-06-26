@@ -15,10 +15,12 @@ relying on it for cost, per the architecture's risk table.
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
 from typing import Any
 
 from codemap.config import LLMConfig, config
+from codemap.metering import LLMMeter
 
 
 class LLMError(RuntimeError):
@@ -36,8 +38,12 @@ class LLMReply:
 
 
 class LLMClient:
-    def __init__(self, llm_config: LLMConfig | None = None):
+    def __init__(self, llm_config: LLMConfig | None = None, meter: LLMMeter | None = None):
         self.cfg = llm_config or config.llm()
+        # Always-on meter: every chat folds its usage + latency in here so a
+        # milestone can print the run's token cost and timing. Cheap; shared
+        # across the concurrent worker threads (LLMMeter is lock-guarded).
+        self.meter = meter if meter is not None else LLMMeter()
         if not self.cfg.api_key:
             raise LLMError(
                 f"No API key for provider {self.cfg.provider!r}. "
@@ -81,18 +87,24 @@ class LLMClient:
             # Supported by OpenAI-compatible endpoints incl. MiniMax/Dashscope.
             kwargs["response_format"] = {"type": "json_object"}
 
+        t0 = time.perf_counter()
         try:
-            resp = self._client.chat.completions.create(**kwargs)
-        except Exception as exc:  # noqa: BLE001 - surface provider errors uniformly
-            # Some endpoints reject response_format; retry once without it.
-            if force_json:
-                kwargs.pop("response_format", None)
+            try:
                 resp = self._client.chat.completions.create(**kwargs)
-            else:
-                raise LLMError(f"{self.cfg.provider} chat failed: {exc}") from exc
+            except Exception as exc:  # noqa: BLE001 - surface provider errors uniformly
+                # Some endpoints reject response_format; retry once without it.
+                if force_json:
+                    kwargs.pop("response_format", None)
+                    resp = self._client.chat.completions.create(**kwargs)
+                else:
+                    raise LLMError(f"{self.cfg.provider} chat failed: {exc}") from exc
+        except Exception:
+            self.meter.record(None, time.perf_counter() - t0, ok=False)
+            raise
 
         text = resp.choices[0].message.content or ""
         usage = resp.usage.model_dump() if getattr(resp, "usage", None) else None
+        self.meter.record(usage, time.perf_counter() - t0)
         return LLMReply(text=text, usage=usage)
 
     def ping(self) -> LLMReply:

@@ -27,6 +27,7 @@ from codemap.config import config
 from codemap.export import write_subway_map
 from codemap.llm import LLMClient, LLMError
 from codemap.mcp_client import CodebaseMemoryClient
+from codemap.metering import timed
 
 MAINLINES = [
     {"flow_type": "m2flow", "seed": "m2_single_dfs._run",
@@ -75,8 +76,10 @@ async def _run(args: argparse.Namespace) -> int:
             coord = Coordinator(mcp=mcp, llm=llm, blackboard=blackboard, project=project,
                                 max_workers=config.max_workers, max_depth=args.depth)
             print(f"\n→ Tracing 2 mainlines through codemap (max_depth={args.depth}) ...\n")
-            result = await coord.run(seeds)
+            with timed() as wall:
+                result = await coord.run(seeds)
             _report(result)
+            print("\n" + llm.meter.summary(wall.seconds))
 
             out = write_subway_map(db, args.out)
             print(f"\n✓ Subway map exported → {out}")
@@ -116,7 +119,8 @@ def _report(result) -> None:
     print("\n═══ Intersections in codemap's own architecture ═══")
     if not result.reviews:
         print("  (none — the two mainlines did not cross)")
-    icons = {"shared-utility": "✦ 公共枢纽", "healthy-seam": "✓ 健康接缝",
+    icons = {"shared-utility": "✦ 公共枢纽", "lightweight-utility": "◇ 轻量透传滤镜",
+             "healthy-seam": "✓ 健康接缝",
              "pollution": "⚠ 职责污染", "god-node": "☠ 上帝节点"}
     for r in result.reviews:
         icon = icons.get(r.verdict, r.verdict)

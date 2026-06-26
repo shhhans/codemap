@@ -14,6 +14,7 @@ import pytest
 
 from codemap.metrics import (
     GOD_NODE,
+    LIGHTWEIGHT_UTILITY,
     ORDINARY,
     SHARED_UTILITY,
     MetricsProbe,
@@ -53,6 +54,25 @@ def test_classify_hub_god_node() -> None:
     # central AND high coupling → infra-disguised mess
     assert classify_hub(0.2, 15, rel_high=0.08, fanout_high=8,
                         fan_in=40, fanin_min=4) == GOD_NODE
+
+
+def test_classify_hub_lightweight_utility_zero_fanout() -> None:
+    # central but ZERO fan-out → a pure pass-through leaf primitive (format_date):
+    # the 透传滤镜, distinct from a heavy shared hub that coordinates internals.
+    assert classify_hub(0.2, 0, rel_high=0.08, fanout_high=8,
+                        fan_in=40, fanin_min=4) == LIGHTWEIGHT_UTILITY
+
+
+def test_classify_hub_moderate_fanout_stays_heavy_hub() -> None:
+    # one out-edge is enough to be a coordinating Heavy Shared Utility, not light.
+    assert classify_hub(0.2, 1, rel_high=0.08, fanout_high=8,
+                        fan_in=40, fanin_min=4) == SHARED_UTILITY
+
+
+def test_classify_hub_zero_fanout_but_not_central_is_ordinary() -> None:
+    # zero fan-out alone is not enough; without high centrality it's just a leaf.
+    assert classify_hub(0.01, 0, rel_high=0.08, fanout_high=8,
+                        fan_in=40, fanin_min=4) == ORDINARY
 
 
 def test_classify_hub_ordinary() -> None:

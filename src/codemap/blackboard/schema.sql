@@ -64,7 +64,9 @@ HAVING COUNT(DISTINCT flow_type) > 1;
 -- responsibility pollution)?
 CREATE TABLE IF NOT EXISTS intersection_verdicts (
     node_id     TEXT PRIMARY KEY REFERENCES nodes(id) ON DELETE CASCADE,
-    verdict     TEXT NOT NULL,             -- 'healthy' | 'dangerous'
+    -- V2.1 five-citizen taxonomy: healthy-seam | shared-utility |
+    -- lightweight-utility (透传滤镜) | pollution | god-node
+    verdict     TEXT NOT NULL,
     description TEXT,
     reviewed_at REAL NOT NULL DEFAULT (unixepoch('subsec'))
 );

@@ -40,6 +40,7 @@ from codemap.llm import LLMClient
 from codemap.mcp_client import CodebaseMemoryClient
 from codemap.metrics import (
     GOD_NODE,
+    LIGHTWEIGHT_UTILITY,
     ORDINARY,
     SHARED_UTILITY,
     MetricsProbe,
@@ -51,13 +52,16 @@ REVIEW_SYSTEM_PROMPT = """\
 你是「代码加工厂」世界观下的**交叉点评审 Agent (Intersection Reviewer)**。
 多条业务主线在某个代码节点交汇时，你要**分析数据如何流经此处**，判断它属于哪一类公民。
 
-# 四类交叉公民（V2）
+# 五类交叉公民（V2.1）
 - **[healthy-seam 稳定接缝]**：各交汇主线消费的是它产出的**稳定状态 (Sink)**
   （如 `getCurrentUser()` 返回的 User 对象），或它是各线**各自独立调用的公共依赖/启动步骤**
   （如索引初始化、配置加载）——这类「大家本就该调用的共享步骤」是健康的接缝。
 - **[shared-utility 公共枢纽 / 已飞升节点]**：被设计为系统级复用的**底层公共原语**
-  （如幂等校验、节点展开函数）。特征是**高相对扇入 + 低扇出 + 被很多调用者复用**。
-  很多主线在此交汇是**极佳的架构健康状态**，金色换乘站，**不是污染**。
+  （如连接池、鉴权中间件、节点展开函数）。特征是**高相对扇入 + 适度扇出 + 被很多调用者复用**，
+  它自身还协调若干内部依赖。很多主线在此交汇是**极佳的架构健康状态**，金色大换乘站，**不是污染**。
+- **[lightweight-utility 轻量透传滤镜]**：**高相对扇入但几乎零扇出**的纯叶子工具
+  （如 `format_date`、`to_json`）。它只做一次数据透传/格式转换便返回，不再向下游流动。
+  多线在此交汇是健康的，但它**不该被当作独立大站点打断主线**——视作管线上的一枚滤镜即可。
 - **[pollution 危险职责污染]**：某主线的**私有中间加工结果**被另一条主线**绕过稳定接口、
   伸进该主线的处理链路里直接摄取**（半成品泄漏）。关键不在「被两条线调用」，而在
   **一条线本应消费稳定产物，却复制/截取了另一条线的内部中间步骤**。
@@ -76,7 +80,7 @@ REVIEW_SYSTEM_PROMPT = """\
    ⇒ 偏 pollution。指标是**佐证**，最终以数据流语义判断为准。
 
 # 输出（严格 JSON，无多余文字）
-{"verdict": "healthy-seam" | "shared-utility" | "pollution" | "god-node",
+{"verdict": "healthy-seam" | "shared-utility" | "lightweight-utility" | "pollution" | "god-node",
  "description": "<一句中文：先说数据流（谁经由什么路径到达、是否绕过稳定接口），再给结论>"}
 """
 
@@ -211,6 +215,8 @@ class ReviewAgent:
             return "god-node"
         if hub_class == SHARED_UTILITY:
             return "shared-utility"
+        if hub_class == LIGHTWEIGHT_UTILITY:
+            return "lightweight-utility"
         # Ordinary centrality: a low-fan-in intermediate (processor) tapped by
         # another line is a private-result leak → pollution. All-Sink → seam.
         # (Visibility is fed to the LLM as an extra ownership hint, but the
@@ -276,6 +282,8 @@ class ReviewAgent:
         m = f"（相对扇入 {metrics.rel_fan_in:.3f} / 扇出 {metrics.fan_out}）" if metrics else ""
         if verdict == "shared-utility":
             return f"主线 {flows} 在此交汇于高复用的公共枢纽{m}，属于已飞升的健康基建。"
+        if verdict == "lightweight-utility":
+            return f"主线 {flows} 在此交汇于轻量透传滤镜{m}，零扇出的纯工具，折叠呈现即可。"
         if verdict == "god-node":
             return f"节点 {m} 高扇入又高扇出，疑似伪装成基建的上帝节点，牵一发动全身。"
         if verdict == "pollution":

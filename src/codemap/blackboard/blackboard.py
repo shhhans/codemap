@@ -17,10 +17,13 @@ from pathlib import Path
 
 _SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
-# Canonical intersection verdicts (V2 four-citizen taxonomy). Two healthy
-# convergences (a stable-state seam, and a 已飞升 shared hub) and two unhealthy
-# ones (private-intermediate pollution, and an infra-disguised god node).
-VERDICTS = frozenset({"healthy-seam", "shared-utility", "pollution", "god-node"})
+# Canonical intersection verdicts (V2.1 five-citizen taxonomy). Three healthy
+# convergences — a stable-state seam, a 已飞升 heavy shared hub, and a 透传 light
+# pass-through filter — and two unhealthy ones (private-intermediate pollution,
+# and an infra-disguised god node).
+VERDICTS = frozenset(
+    {"healthy-seam", "shared-utility", "lightweight-utility", "pollution", "god-node"}
+)
 
 
 @dataclass
