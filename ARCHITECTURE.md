@@ -17,8 +17,15 @@
 
 | 层 | 选型 |
 |----|------|
-| 底层图谱引擎 | `Codebase-Memory`（C / Tree-Sitter / SQLite，单二进制，零依赖） |
-| 交互协议 | MCP (Model Context Protocol)，暴露 `trace_call_path`、`get_code_snippet` 等 |
+| 底层图谱引擎 | `Codebase-Memory`（[DeusData/codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp)，C / Tree-Sitter / SQLite，单二进制，零依赖） |
+| 交互协议 | MCP (Model Context Protocol)，暴露 `trace_path`、`get_code_snippet`、`search_graph` 等 |
+
+> **契约校准（v0.8.1 实测）**：底层引擎是公开项目 `DeusData/codebase-memory-mcp`。
+> 实测发现方案原稿与真实工具名有偏差，已固化于 [`docs/mcp_tools_contract.json`](./docs/mcp_tools_contract.json)：
+> - 调用追踪工具真实名为 **`trace_path`**（非 `trace_call_path`），`mode='calls'` 时按 `function_name` 检索。
+> - 任何查询前须先 **`index_repository(repo_path=...)`** 建图；之后所有查询都需带 `project` 参数。
+> - MCP server **无参数**直接 stdio 启动（没有 `--mcp` 开关）。
+> - 真实暴露 14 个工具（另有 `query_graph` 支持 Cypher 多跳查询、`get_architecture` 给社区聚类等）。
 | LLM 推理端 | Minimax API + Dashscope API，经 `openai` 库统一集成 |
 | 后端 / Agent | Python + 极简无锁并发调度器（`asyncio`） |
 | 前端 / 可视化 | HTML5 + D3.js / ECharts 拓扑/地铁图渲染 |
@@ -59,7 +66,7 @@ Schema 见 [`src/codemap/blackboard/schema.sql`](./src/codemap/blackboard/schema
 
 **步骤一 · 按需探路 (On-demand Exploration)**
 1. Worker 从 Coordinator 拿到当前节点 `Node A` 与目标追踪物 `Token`。
-2. 经 MCP 调用 `trace_call_path` 获取 `Node A` 下游 1 层相邻节点 `[Node B, Node C]`。
+2. 经 MCP 调用 `trace_path`（`mode='calls'`）获取 `Node A` 下游 1 层相邻节点 `[Node B, Node C]`。
 3. 经 MCP 调用 `get_code_snippet` 提取 A/B/C 的核心源码签名。
 
 **步骤二 · 语义剪枝与打卡 (Semantic Pruning & Logging)**
@@ -123,9 +130,10 @@ Agent 最终输出一张用于渲染"地铁图"的 JSON 地图。权威 JSON Sch
 
 ## 7. 开发里程碑
 
-- **M1 基础设施连通**：Python 启动并经 MCP 连上 `Codebase-Memory`，成功调用
-  `trace_call_path` / `get_code_snippet`，**并把真实工具 schema 固化为契约**
-  （`docs/mcp_tools_contract.json`，后续三个里程碑均依赖它）。
+- **M1 基础设施连通** ✅：Python 启动并经 MCP 连上 `Codebase-Memory`，成功调用
+  `index_repository` / `search_graph` / `trace_path` / `get_code_snippet`，**并把真实工具
+  schema 固化为契约**（`docs/mcp_tools_contract.json`，后续三个里程碑均依赖它）。
+  已用 v0.8.1 实测打通，并以 codemap 自身源码（169 节点 / 365 边）跑通真实结构化查询。
 - **M2 单线 DFS 追踪**：实现 System Prompt + 动态滑动窗口；硬编码 Seed，命令行跑通
   单一主线语义剪枝并打印过滤后路径。
 - **M3 全局黑板与并发分叉**：引入 SQLite 黑板 + `log_trace`；实现分叉 Fork 与多 Agent
@@ -137,7 +145,7 @@ Agent 最终输出一张用于渲染"地铁图"的 JSON 地图。权威 JSON Sch
 
 | 风险 | 缓解 |
 |------|------|
-| MCP 工具真实 schema 未知，上层全依赖它 | **M1 交付物即工具契约固化**，先 dump 再编码 |
+| ~~MCP 工具真实 schema 未知，上层全依赖它~~ ✅ 已解决 | M1 已固化真实契约于 `docs/mcp_tools_contract.json`（v0.8.1 实测） |
 | LLM 污点判定会误判（漏判断线 / 误判污染） | 每次判定带 confidence；低置信降级标记不直接剪 |
 | DFS + Fork 指数爆炸 / 环形调用死循环 | `MAX_DEPTH` / `MAX_WORKERS` + `traces` 去重 visited |
 | Minimax / Dashscope 的 Prompt Cache 行为与 Anthropic 不同，成本模型可能崩 | 早期独立验证两家 cache 命中是否真省钱 |

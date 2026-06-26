@@ -95,14 +95,23 @@ class CodebaseMemoryClient:
         return "\n".join(t for t in texts if t)
 
     # ── Convenience aliases for the graph queries we rely on ────────────────
-    # These mirror the planned Codebase-Memory tool names. Argument names are
-    # best-effort guesses until M1 freezes the real contract; keep them thin so
-    # adapting to the discovered schema is a one-line change.
-    async def trace_call_path(self, **arguments: Any) -> Any:
-        return await self.call_tool("trace_call_path", arguments)
+    # Names + argument conventions verified against codebase-memory-mcp v0.8.1
+    # and frozen in docs/mcp_tools_contract.json. Note: every query needs a
+    # `project` (see index_repository); trace_path's calls mode keys on
+    # `function_name`, while get_code_snippet keys on `qualified_name`.
+    async def index_repository(self, repo_path: str, **arguments: Any) -> Any:
+        return await self.call_tool("index_repository", {"repo_path": repo_path, **arguments})
 
-    async def get_code_snippet(self, **arguments: Any) -> Any:
-        return await self.call_tool("get_code_snippet", arguments)
+    async def search_graph(self, project: str, **arguments: Any) -> Any:
+        return await self.call_tool("search_graph", {"project": project, **arguments})
 
-    async def search_graph(self, **arguments: Any) -> Any:
-        return await self.call_tool("search_graph", arguments)
+    async def trace_path(self, project: str, **arguments: Any) -> Any:
+        """Trace through the graph. mode='calls' (callers/callees),
+        'data_flow' (value propagation), or 'cross_service'."""
+        return await self.call_tool("trace_path", {"project": project, **arguments})
+
+    async def get_code_snippet(self, project: str, qualified_name: str, **arguments: Any) -> Any:
+        return await self.call_tool(
+            "get_code_snippet",
+            {"project": project, "qualified_name": qualified_name, **arguments},
+        )

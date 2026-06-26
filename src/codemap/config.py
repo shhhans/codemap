@@ -29,9 +29,13 @@ def _split_args(raw: str) -> list[str]:
 class CodebaseMemoryConfig:
     """How to launch the Codebase-Memory MCP server (stdio transport)."""
 
-    binary: str = field(default_factory=lambda: os.getenv("CODEBASE_MEMORY_BIN", "codebase-memory"))
+    # Verified against codebase-memory-mcp v0.8.1: running the binary with no
+    # args starts the MCP server on stdio (there is no `--mcp` flag).
+    binary: str = field(
+        default_factory=lambda: os.getenv("CODEBASE_MEMORY_BIN", "codebase-memory-mcp")
+    )
     args: list[str] = field(
-        default_factory=lambda: _split_args(os.getenv("CODEBASE_MEMORY_ARGS", "--mcp"))
+        default_factory=lambda: _split_args(os.getenv("CODEBASE_MEMORY_ARGS", ""))
     )
 
 

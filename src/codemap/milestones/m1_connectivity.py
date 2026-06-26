@@ -29,7 +29,9 @@ from codemap.mcp_client import CodebaseMemoryClient, MCPDependencyError, ToolInf
 
 # Tools M1 expects Codebase-Memory to expose. Missing ones are warnings, not
 # hard failures — the binary's real surface is whatever list_tools() returns.
-EXPECTED_TOOLS = ["trace_call_path", "get_code_snippet", "search_graph"]
+# Verified present in codebase-memory-mcp v0.8.1 (note: the design doc's
+# `trace_call_path` is really `trace_path`).
+EXPECTED_TOOLS = ["index_repository", "search_graph", "trace_path", "get_code_snippet"]
 
 CONTRACT_PATH = Path("docs/mcp_tools_contract.json")
 
