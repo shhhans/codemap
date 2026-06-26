@@ -113,6 +113,9 @@ def _report(result) -> None:
         print(f"  ⑂ [{flow}] forked {n} at {node.rsplit('.', 1)[-1]}()")
     if not result.fork_events:
         print("  (none)")
+    skipped = sum(w.skipped for w in result.workers.values())
+    if skipped:
+        print(f"  ⚡ 静态快速通道：{skipped} 个候选本地解析，未咨询 LLM")
     for flow, worker in result.workers.items():
         print(f"\n  {flow} ({len(worker.retained)} stations): "
               + " → ".join(n.name for n in worker.retained))

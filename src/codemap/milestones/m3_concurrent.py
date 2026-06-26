@@ -116,6 +116,9 @@ def _report(result, blackboard: Blackboard) -> None:
     else:
         print("  (no forks)")
 
+    skipped = sum(w.skipped for w in result.workers.values())
+    if skipped:
+        print(f"  ⚡ 静态快速通道：{skipped} 个候选本地解析，未咨询 LLM")
     for flow in ("auth", "billing"):
         w = result.workers.get(flow)
         if w:

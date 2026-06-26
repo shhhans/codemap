@@ -49,6 +49,9 @@ SYSTEM_PROMPT = """\
    `confidence` 调低并归入 `continue`，交由全局黑板与评审引擎处理。
 5. **是否下钻只由 `is_sink` 决定**：`is_sink=true` → 在此打卡即止，不再展开下游；
    `is_sink=false` → 继续向其下游深入。不存在「continue 但不深入」的第三态。
+6. **叶子即沉淀**：候选若标注 `[扇出=0·叶子]`，说明它在图中已无下游、无法再向下传递物质——
+   它接收了原材料则判 `continue` + `is_sink=true`（沉淀点），与原材料无关则判 `noise`；
+   无需纠结是否继续深入（本就无处可去）。
 
 # 输出格式
 你必须进行批量判定。请严格输出 JSON 格式，不要包含任何 Markdown 标记块 (```json) 或多余文字：
@@ -86,6 +89,10 @@ class Candidate:
     # True when this edge was recovered by name-matching the source (a dynamic
     # dispatch the static call graph missed), so it carries less certainty.
     recovered: bool = False
+    # Out-degree in the call graph, filled by the worker's static fast-path. 0
+    # means a leaf (no downstream) — it cannot propagate material further, so if
+    # it touches the token it is a Sink, else noise. None = not measured.
+    fan_out: int | None = None
 
 
 def build_window(
@@ -105,7 +112,9 @@ def build_window(
     for i, c in enumerate(candidates, 1):
         loc = f"  ({c.file_path})" if c.file_path else ""
         tag = "  ⟨动态调用·名称匹配，置信偏低⟩" if c.recovered else ""
-        lines.append(f"{i}. {c.ref}{loc}{tag}")
+        leaf = "  [扇出=0·叶子]" if c.fan_out == 0 else (
+            f"  [扇出={c.fan_out}]" if c.fan_out else "")
+        lines.append(f"{i}. {c.ref}{loc}{tag}{leaf}")
         lines.append(f"   signature/snippet: {c.signature}")
     lines += [
         "",

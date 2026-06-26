@@ -57,6 +57,7 @@ class TaintWorker:
 
     retained: list[RetainedNode] = field(default_factory=list)
     pruned: list[tuple[str, str, str]] = field(default_factory=list)  # (name, verdict, reason)
+    skipped: int = 0  # candidates the static fast-path resolved without the LLM
     _seen: set[str] = field(default_factory=set)
     # Per-module imported-module cache + the project's Module qualified-names
     # (resolved once). Imports live at file scope, not in a node's body, so
@@ -125,9 +126,29 @@ class TaintWorker:
         if not normal:
             return children
 
-        decisions = await self._classify(qualified_name, normal)
-        by_ref = {c.ref: c for c in normal}
-        by_ord = {str(i): c for i, c in enumerate(normal, 1)}
+        # Static fast-path: a candidate this flow has already checked in on (or
+        # the node itself) needs no LLM — the idempotent dedup would discard its
+        # verdict anyway, so classifying it just burns tokens/reasoning. Dropping
+        # it from the window is a free, correctness-preserving reduction.
+        ask: list[Candidate] = []
+        for c in normal:
+            if c.ref == qualified_name or self._already_seen(c.ref):
+                self.skipped += 1
+            else:
+                ask.append(c)
+        if not ask:
+            return children
+
+        # Annotate each surviving candidate with its out-degree (one batched
+        # query) so the model can resolve leaves (扇出=0) as sinks without
+        # deliberating about descent — the "扇出为0必是 Sink" structural signal.
+        fan_outs = await self._out_edge_counts([c.ref for c in ask])
+        for c in ask:
+            c.fan_out = fan_outs.get(c.ref, 0)
+
+        decisions = await self._classify(qualified_name, ask)
+        by_ref = {c.ref: c for c in ask}
+        by_ord = {str(i): c for i, c in enumerate(ask, 1)}
 
         for d in decisions:
             cand = by_ref.get(str(d.get("node"))) or by_ord.get(str(d.get("node")))
@@ -281,6 +302,39 @@ class TaintWorker:
             return int(raw)
         except (TypeError, ValueError):
             return 0
+
+    def _already_seen(self, ref: str) -> bool:
+        """Has this flow already checked in on `ref`? Authoritative dedup still
+        lives in `_record`; this is the best-effort fast-path gate."""
+        if self.blackboard is not None:
+            return self.blackboard.has_visited(ref, self.flow_type)
+        return ref in self._seen
+
+    async def _out_edge_counts(self, refs: list[str]) -> dict[str, int]:
+        """Out-degree (CALLS) for several nodes in one query — refs missing from
+        the result are leaves (0). Best-effort: a query failure just leaves the
+        fan-out hint off (callers default to 0)."""
+        if not refs:
+            return {}
+        in_list = ", ".join("'" + r.replace("'", "") + "'" for r in refs)
+        cypher = (
+            f"MATCH (f)-[:CALLS]->(t) WHERE f.qualified_name IN [{in_list}] "
+            "RETURN f.qualified_name AS qn, count(t) AS n"
+        )
+        try:
+            rows = self._rows(await self.mcp.query_graph(self.project, query=cypher))
+        except Exception:  # noqa: BLE001 - fan-out hint is optional
+            return {}
+        out: dict[str, int] = {}
+        for r in rows:
+            qn = r.get("qn")
+            if qn is None:
+                continue
+            try:
+                out[qn] = int(r.get("n", 0))
+            except (TypeError, ValueError):
+                out[qn] = 0
+        return out
 
     async def _recover_dynamic(self, qualified_name: str, already: set[str],
                                source: str = "", stubs: StubModules | None = None) -> list[Candidate]:
