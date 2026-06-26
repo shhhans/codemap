@@ -98,6 +98,17 @@ class LLMClient:
 
 def _extract_json(text: str) -> Any:
     text = text.strip()
+    # Reasoning models (e.g. MiniMax-M3) prepend a <think>...</think> block that
+    # itself can contain braces — strip it before hunting for the JSON object.
+    if "<think>" in text:
+        import re
+
+        text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+        # An unterminated think block (truncated): drop everything up to the
+        # last </think>, or up to the first '{' if the tag never closed.
+        if "<think>" in text:
+            tail = text.rsplit("</think>", 1)
+            text = (tail[1] if len(tail) > 1 else text[text.find("{"):]).strip()
     if text.startswith("```"):
         # strip ```json ... ``` fence
         text = text.split("```", 2)[1]
@@ -107,8 +118,16 @@ def _extract_json(text: str) -> Any:
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        # Best-effort: grab the outermost {...}.
-        start, end = text.find("{"), text.rfind("}")
-        if start != -1 and end > start:
-            return json.loads(text[start : end + 1])
-        raise
+        pass
+    # Best-effort: scan each '{' and let the JSON decoder consume the first
+    # position that yields a valid object (robust to braces in leftover prose).
+    decoder = json.JSONDecoder()
+    for i, ch in enumerate(text):
+        if ch != "{":
+            continue
+        try:
+            obj, _ = decoder.raw_decode(text, i)
+            return obj
+        except json.JSONDecodeError:
+            continue
+    raise json.JSONDecodeError("No JSON object found in LLM reply", text, 0)
