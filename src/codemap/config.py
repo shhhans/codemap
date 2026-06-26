@@ -59,6 +59,18 @@ class Config:
     max_workers: int = field(default_factory=lambda: int(os.getenv("CODEMAP_MAX_WORKERS", "8")))
     llm_provider: str = field(default_factory=lambda: os.getenv("CODEMAP_LLM_PROVIDER", "minimax"))
 
+    # ── Intersection ownership thresholds (M2/M3) ──────────────────────────
+    # Calibration knobs for the Concordia relative-fan-in classifier. A node
+    # whose relative fan-in ≥ rel_fanin_high reads as a central hub; combined
+    # with fan_out ≥ fanout_high it is a God Node, otherwise a Shared Utility.
+    # Defaults are a starting point — recalibrate against a dogfood run.
+    rel_fanin_high: float = field(
+        default_factory=lambda: float(os.getenv("CODEMAP_REL_FANIN_HIGH", "0.08"))
+    )
+    fanout_high: int = field(
+        default_factory=lambda: int(os.getenv("CODEMAP_FANOUT_HIGH", "8"))
+    )
+
     def llm(self, provider: str | None = None) -> LLMConfig:
         """Resolve the LLM endpoint config for `provider` (defaults to llm_provider)."""
         provider = (provider or self.llm_provider).lower()
