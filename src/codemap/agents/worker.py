@@ -17,6 +17,7 @@ asyncio.to_thread so one worker doesn't block the event loop.
 from __future__ import annotations
 
 import asyncio
+import os
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -411,8 +412,42 @@ class TaintWorker:
         return TaintWorker._Sig(text=text.strip() or qualified_name,
                                 file_path=snip.get("file_path"))
 
-    # ── LLM classification ───────────────────────────────────────────────────
+    # ── LLM classification (size-capped, failure-isolated batches) ───────────
+    # A reasoning model's <think> cost scales with batch width against one hard
+    # token cap, so a wide batch can truncate and lose *every* decision in it.
+    # Independent decisions must not share fate: classify at width 4, and on an
+    # unparsable (usually truncated) batch split it and retry at 2, then 1 — a
+    # single hard candidate then fails alone instead of taking the batch down.
+    _BATCH_LADDER: tuple[int, ...] = (4, 2, 1)
+
     async def _classify(self, current: str, candidates: list[Candidate]) -> list[dict[str, Any]]:
+        return await self._classify_laddered(current, candidates, self._BATCH_LADDER)
+
+    async def _classify_laddered(self, current: str, candidates: list[Candidate],
+                                 sizes: tuple[int, ...]) -> list[dict[str, Any]]:
+        """Classify in chunks of ``sizes[0]``; any chunk that fails to parse is
+        retried at the next (smaller) width, isolating the failure to its batch."""
+        size = sizes[0]
+        out: list[dict[str, Any]] = []
+        for i in range(0, len(candidates), size):
+            sub = candidates[i:i + size]
+            decisions = await self._ask_chunk(current, sub)
+            if decisions is not None:
+                out.extend(decisions)
+            elif len(sizes) > 1:
+                out.extend(await self._classify_laddered(current, sub, sizes[1:]))
+            # else: smallest width already failed → drop this batch (the empty
+            # result matches the pre-ladder behaviour; _ask_chunk logged the loss).
+        return out
+
+    async def _ask_chunk(self, current: str,
+                         candidates: list[Candidate]) -> list[dict[str, Any]] | None:
+        """One LLM round-trip for one batch. Returns the decisions with each
+        ``node`` normalised to its candidate's qualified ref — build_window numbers
+        candidates from 1 *per call*, so a chunk-local ordinal must be resolved
+        here, before the caller maps it against the full frontier. Returns ``None``
+        if the reply didn't parse (usually a truncated completion), signalling the
+        caller to retry this batch at a smaller width."""
         window = build_window(
             flow_type=self.flow_type,
             material=self.material,
@@ -423,19 +458,25 @@ class TaintWorker:
         reply = await asyncio.to_thread(self.llm.chat, SYSTEM_PROMPT, window)
         try:
             data = reply.json()
-        except Exception as exc:  # noqa: BLE001 - malformed JSON: treat as all-noise, don't crash
-            # Most often a truncated answer (completion hit max_tokens on a wide,
-            # high-fan-out node). Silent before; gate a diagnostic on CODEMAP_DEBUG
-            # so the empty expansion isn't a mystery (this is what hid the dogfood
-            # _run no-children case until the meter showed completion == the cap).
-            import os
+        except Exception as exc:  # noqa: BLE001 - truncated/malformed: signal a retry
             if os.getenv("CODEMAP_DEBUG"):
                 ct = (reply.usage or {}).get("completion_tokens")
-                print(f"[worker _classify unparsable] {current.rsplit('.',1)[-1]}: "
-                      f"{type(exc).__name__} (completion_tokens={ct}, "
-                      f"candidates={len(candidates)})")
-            return []
-        return data.get("decisions", []) if isinstance(data, dict) else []
+                print(f"[worker _classify retry] {current.rsplit('.',1)[-1]}: "
+                      f"{type(exc).__name__} at batch={len(candidates)} "
+                      f"(completion_tokens={ct})")
+            return None
+        raw = data.get("decisions", []) if isinstance(data, dict) else []
+        by_ref = {c.ref: c for c in candidates}
+        by_ord = {str(i): c for i, c in enumerate(candidates, 1)}
+        out: list[dict[str, Any]] = []
+        for d in raw:
+            cand = by_ref.get(str(d.get("node"))) or by_ord.get(str(d.get("node")))
+            if cand is None:
+                continue
+            d = dict(d)
+            d["node"] = cand.ref  # normalise chunk-local ordinal → global ref
+            out.append(d)
+        return out
 
     # ── Bookkeeping ──────────────────────────────────────────────────────────
     async def _record(self, qualified_name: str, *, role: str, confidence: float, depth: int,
