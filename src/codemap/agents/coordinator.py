@@ -99,7 +99,17 @@ class Coordinator:
                     self._forks.append((flow_type, qualified_name, len(children)))
                 for child_qn, child_depth in children:
                     self._queue.put_nowait((flow_type, child_qn, child_depth))
-            except Exception:  # noqa: BLE001 - one bad node must not stall the pool
-                pass
+            except Exception as exc:  # noqa: BLE001 - one bad node must not stall the pool
+                # A swallowed fault here silently drops a node's children (this is
+                # what hid m3flow's _scheduler→expand_one descent). Keep the pool
+                # alive, but surface the fault under CODEMAP_DEBUG so the loss is
+                # diagnosable instead of invisible.
+                import os
+                if os.getenv("CODEMAP_DEBUG"):
+                    import traceback
+                    print(f"[scheduler slot{slot}] {flow_type} expand_one("
+                          f"{qualified_name.rsplit('.', 1)[-1]}@{depth}) raised "
+                          f"{type(exc).__name__}: {exc}")
+                    traceback.print_exc()
             finally:
                 self._queue.task_done()
