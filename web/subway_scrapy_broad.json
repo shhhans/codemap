@@ -1,0 +1,289 @@
+{
+  "mainlines": [
+    {
+      "id": "line_dlmw",
+      "name": "dlmw mainline",
+      "color": "#E76F51",
+      "nodes": [
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.downloader.middleware.DownloaderMiddlewareManager.download",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.downloader.middleware.DownloaderMiddlewareManager.download_async"
+      ]
+    },
+    {
+      "id": "line_download",
+      "name": "download mainline",
+      "color": "#1E90FF",
+      "nodes": [
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.engine.ExecutionEngine._start_scheduled_request",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.scheduler.BaseScheduler.next_request",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.signalmanager.SignalManager.send_catch_log",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.engine.ExecutionEngine._download",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.http.cookies.WrappedResponse.info",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.log.failure_to_exc_info",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.datatypes.CaselessDict.setdefault",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.signal.send_catch_log",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.datatypes.CaselessDict.normkey",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.datatypes.CaselessDict.normvalue",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.datatypes.CaselessDict.pop",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.datatypes.CaselessDict.get",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.curl.CurlParser.error"
+      ]
+    },
+    {
+      "id": "line_pipeline",
+      "name": "pipeline mainline",
+      "color": "#2A9D8F",
+      "nodes": [
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.pipelines.ItemPipelineManager.process_item",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.defer.deferred_from_coro",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.pipelines.ItemPipelineManager.process_item_async",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.middleware.MiddlewareManager._process_chain",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.defer.ensure_awaitable",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.defer.maybe_deferred_to_future",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.defer.deferred_to_future"
+      ]
+    },
+    {
+      "id": "line_schedule",
+      "name": "schedule mainline",
+      "color": "#9B5DE5",
+      "nodes": [
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.engine.ExecutionEngine.crawl",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.engine.ExecutionEngine._schedule_request",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.scheduler.BaseScheduler.enqueue_request"
+      ]
+    },
+    {
+      "id": "line_scrape",
+      "name": "scrape mainline",
+      "color": "#F4A261",
+      "nodes": [
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.scraper.Scraper._scrape",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.spidermw.SpiderMiddlewareManager.scrape_response_async",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.spidermw.SpiderMiddlewareManager._process_spider_input",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.asyncgen.as_async_generator",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.spidermw.SpiderMiddlewareManager._process_callback_output",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.spidermw.SpiderMiddlewareManager._process_spider_exception",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.python.MutableAsyncChain",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.spidermw.SpiderMiddlewareManager._evaluate_iterable",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.spidermw.SpiderMiddlewareManager._process_spider_output",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.python._async_chain",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.python.MutableChain.extend"
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.downloader.middleware.DownloaderMiddlewareManager.download",
+      "name": "download",
+      "type": "source"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.downloader.middleware.DownloaderMiddlewareManager.download_async",
+      "name": "download_async",
+      "type": "sink",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/core/downloader/middleware.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.engine.ExecutionEngine._download",
+      "name": "_download",
+      "type": "sink",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/core/engine.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.engine.ExecutionEngine._schedule_request",
+      "name": "_schedule_request",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/core/engine.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.engine.ExecutionEngine._start_scheduled_request",
+      "name": "_start_scheduled_request",
+      "type": "source"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.engine.ExecutionEngine.crawl",
+      "name": "crawl",
+      "type": "source"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.scheduler.BaseScheduler.enqueue_request",
+      "name": "enqueue_request",
+      "type": "sink",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/core/scheduler.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.scheduler.BaseScheduler.next_request",
+      "name": "next_request",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/core/scheduler.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.scraper.Scraper._scrape",
+      "name": "_scrape",
+      "type": "source"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.spidermw.SpiderMiddlewareManager._evaluate_iterable",
+      "name": "_evaluate_iterable",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/core/spidermw.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.spidermw.SpiderMiddlewareManager._process_callback_output",
+      "name": "_process_callback_output",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/core/spidermw.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.spidermw.SpiderMiddlewareManager._process_spider_exception",
+      "name": "_process_spider_exception",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/core/spidermw.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.spidermw.SpiderMiddlewareManager._process_spider_input",
+      "name": "_process_spider_input",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/core/spidermw.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.spidermw.SpiderMiddlewareManager._process_spider_output",
+      "name": "_process_spider_output",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/core/spidermw.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.spidermw.SpiderMiddlewareManager.scrape_response_async",
+      "name": "scrape_response_async",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/core/spidermw.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.http.cookies.WrappedResponse.info",
+      "name": "info",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/http/cookies.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.middleware.MiddlewareManager._process_chain",
+      "name": "_process_chain",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/middleware.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.pipelines.ItemPipelineManager.process_item",
+      "name": "process_item",
+      "type": "source"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.pipelines.ItemPipelineManager.process_item_async",
+      "name": "process_item_async",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/pipelines/__init__.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.signalmanager.SignalManager.send_catch_log",
+      "name": "send_catch_log",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/signalmanager.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.asyncgen.as_async_generator",
+      "name": "as_async_generator",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/utils/asyncgen.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.curl.CurlParser.error",
+      "name": "error",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/utils/curl.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.datatypes.CaselessDict.get",
+      "name": "get",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/utils/datatypes.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.datatypes.CaselessDict.normkey",
+      "name": "normkey",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/utils/datatypes.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.datatypes.CaselessDict.normvalue",
+      "name": "normvalue",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/utils/datatypes.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.datatypes.CaselessDict.pop",
+      "name": "pop",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/utils/datatypes.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.datatypes.CaselessDict.setdefault",
+      "name": "setdefault",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/utils/datatypes.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.defer.deferred_from_coro",
+      "name": "deferred_from_coro",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/utils/defer.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.defer.deferred_to_future",
+      "name": "deferred_to_future",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/utils/defer.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.defer.ensure_awaitable",
+      "name": "ensure_awaitable",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/utils/defer.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.defer.maybe_deferred_to_future",
+      "name": "maybe_deferred_to_future",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/utils/defer.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.log.failure_to_exc_info",
+      "name": "failure_to_exc_info",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/utils/log.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.python.MutableAsyncChain",
+      "name": "MutableAsyncChain",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/utils/python.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.python.MutableChain.extend",
+      "name": "extend",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/utils/python.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.python._async_chain",
+      "name": "_async_chain",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/utils/python.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.signal.send_catch_log",
+      "name": "send_catch_log",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/utils/signal.py"
+    }
+  ],
+  "intersections": []
+}
