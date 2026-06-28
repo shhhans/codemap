@@ -34,7 +34,7 @@ from codemap.export import write_subway_map
 from codemap.llm import LLMClient, LLMError
 from codemap.mcp_client import CodebaseMemoryClient
 
-PALETTE = ["#1E90FF", "#F4A261", "#2A9D8F", "#E76F51"]
+PALETTE = ["#1E90FF", "#F4A261", "#2A9D8F", "#E76F51", "#9B5DE5", "#F15BB5", "#00BBF9"]
 
 
 async def _resolve(mcp: CodebaseMemoryClient, project: str, suffix: str) -> str | None:
@@ -75,15 +75,20 @@ async def main(args: argparse.Namespace) -> int:
             return 0
 
         specs = []
-        materials = [args.material_a or args.material, args.material_b or args.material]
-        for i, raw in enumerate([args.seed_a, args.seed_b]):
-            flow, _, suffix = raw.partition(":")
+        for i, raw in enumerate(args.seed):
+            # flow:qualified_suffix[:material]  (material falls back to --material)
+            parts = raw.split(":", 2)
+            if len(parts) < 2:
+                print(f"✗ bad --seed {raw!r}; want flow:suffix[:material]", file=sys.stderr)
+                return 4
+            flow, suffix = parts[0], parts[1]
+            material = parts[2] if len(parts) > 2 else args.material
             qn = await _resolve(mcp, project, suffix)
             if not qn:
                 print(f"✗ could not resolve seed {suffix!r}", file=sys.stderr)
                 return 4
-            print(f"  seed[{flow}] = {qn}  (material: {materials[i]})")
-            specs.append(SeedSpec(flow_type=flow, seed=qn, material=materials[i],
+            print(f"  seed[{flow}] = {qn}  (material: {material})")
+            specs.append(SeedSpec(flow_type=flow, seed=qn, material=material,
                                   name=f"{flow} mainline", color=PALETTE[i % len(PALETTE)],
                                   seed_name=suffix.rsplit(".", 1)[-1]))
         try:
@@ -99,7 +104,8 @@ async def main(args: argparse.Namespace) -> int:
         bb = Blackboard(db)
         coord = Coordinator(mcp=mcp, llm=llm, blackboard=bb, project=project,
                             max_workers=config.max_workers, max_depth=args.depth)
-        print(f"\n→ Tracing two mainlines (depth={args.depth}, max_workers={config.max_workers}) ...\n")
+        print(f"\n→ Tracing {len(specs)} mainlines (depth={args.depth}, "
+              f"max_workers={config.max_workers}) ...\n")
         result = await coord.run(specs)
 
         for flow, w in result.workers.items():
@@ -133,12 +139,10 @@ async def main(args: argparse.Namespace) -> int:
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description="Run the codemap pipeline on an external repo.")
     p.add_argument("--repo", required=True)
-    p.add_argument("--seed-a", help="flow_type:qualified_name_suffix")
-    p.add_argument("--seed-b", help="flow_type:qualified_name_suffix")
+    p.add_argument("--seed", action="append", default=[],
+                   help="flow_type:qualified_suffix[:material]; repeatable for N mainlines")
     p.add_argument("--material", default="request / response object",
-                   help="default tracked material for both mainlines")
-    p.add_argument("--material-a", help="override tracked material for seed-a")
-    p.add_argument("--material-b", help="override tracked material for seed-b")
+                   help="default tracked material when a --seed omits its own")
     p.add_argument("--depth", type=int, default=5)
     p.add_argument("--out", default="web/subway_map.json")
     p.add_argument("--db", default=".codemap/external.sqlite")

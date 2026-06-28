@@ -1,0 +1,187 @@
+{
+  "mainlines": [
+    {
+      "id": "line_dlmw",
+      "name": "dlmw mainline",
+      "color": "#E76F51",
+      "nodes": [
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.downloader.middleware.DownloaderMiddlewareManager.download",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.middleware.MiddlewareManager._set_compat_spider",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.defer.deferred_from_coro",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.downloader.middleware.DownloaderMiddlewareManager.download_async",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.defer.maybe_deferred_to_future",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.defer.deferred_to_future"
+      ]
+    },
+    {
+      "id": "line_download",
+      "name": "download mainline",
+      "color": "#1E90FF",
+      "nodes": [
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.engine.ExecutionEngine._start_scheduled_request"
+      ]
+    },
+    {
+      "id": "line_pipeline",
+      "name": "pipeline mainline",
+      "color": "#2A9D8F",
+      "nodes": [
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.pipelines.ItemPipelineManager.process_item",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.defer.deferred_from_coro",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.pipelines.ItemPipelineManager.process_item_async",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.middleware.MiddlewareManager._process_chain",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.defer.ensure_awaitable",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.defer.maybe_deferred_to_future",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.defer.deferred_to_future"
+      ]
+    },
+    {
+      "id": "line_schedule",
+      "name": "schedule mainline",
+      "color": "#9B5DE5",
+      "nodes": [
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.engine.ExecutionEngine.crawl",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.engine.ExecutionEngine._schedule_request",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.reactor.CallLaterOnce.schedule",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.asyncio.call_later",
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.scheduler.BaseScheduler.enqueue_request"
+      ]
+    },
+    {
+      "id": "line_scrape",
+      "name": "scrape mainline",
+      "color": "#F4A261",
+      "nodes": [
+        "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.scraper.Scraper._scrape"
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.downloader.middleware.DownloaderMiddlewareManager.download",
+      "name": "download",
+      "type": "source"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.downloader.middleware.DownloaderMiddlewareManager.download_async",
+      "name": "download_async",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/core/downloader/middleware.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.engine.ExecutionEngine._schedule_request",
+      "name": "_schedule_request",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/core/engine.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.engine.ExecutionEngine._start_scheduled_request",
+      "name": "_start_scheduled_request",
+      "type": "source"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.engine.ExecutionEngine.crawl",
+      "name": "crawl",
+      "type": "source"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.scheduler.BaseScheduler.enqueue_request",
+      "name": "enqueue_request",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/core/scheduler.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.core.scraper.Scraper._scrape",
+      "name": "_scrape",
+      "type": "source"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.middleware.MiddlewareManager._process_chain",
+      "name": "_process_chain",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/middleware.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.middleware.MiddlewareManager._set_compat_spider",
+      "name": "_set_compat_spider",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/middleware.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.pipelines.ItemPipelineManager.process_item",
+      "name": "process_item",
+      "type": "source"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.pipelines.ItemPipelineManager.process_item_async",
+      "name": "process_item_async",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/pipelines/__init__.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.asyncio.call_later",
+      "name": "call_later",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/utils/asyncio.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.defer.deferred_from_coro",
+      "name": "deferred_from_coro",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/utils/defer.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.defer.deferred_to_future",
+      "name": "deferred_to_future",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/utils/defer.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.defer.ensure_awaitable",
+      "name": "ensure_awaitable",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/utils/defer.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.defer.maybe_deferred_to_future",
+      "name": "maybe_deferred_to_future",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/utils/defer.py"
+    },
+    {
+      "id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.reactor.CallLaterOnce.schedule",
+      "name": "schedule",
+      "type": "processor",
+      "file_path": "/tmp/claude-0/-home-user-codemap/c7b83df4-8fd5-5310-a7df-4e4fc55a896a/scratchpad/src_repos/scrapy-2.16.0/scrapy/utils/reactor.py"
+    }
+  ],
+  "intersections": [
+    {
+      "node_id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.defer.deferred_from_coro",
+      "type": "suspected",
+      "description": "交叉证据置信偏低 (min_confidence=0.55，可能来自动态补边)，主线 dlmw、pipeline 在此交汇，降级为疑似/待确认。",
+      "involved_lines": [
+        "line_dlmw",
+        "line_pipeline"
+      ]
+    },
+    {
+      "node_id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.defer.deferred_to_future",
+      "type": "suspected",
+      "description": "两条主线均经共享上游枢纽 maybe_deferred_to_future()（已判定为「suspected」）抵达此处，属于该枢纽的下游、并非独立摄取，继承其判定。",
+      "involved_lines": [
+        "line_dlmw",
+        "line_pipeline"
+      ]
+    },
+    {
+      "node_id": "tmp-claude-0-home-user-codemap-c7b83df4-8fd5-5310-a7df-4e4fc55a896a-scratchpad-src_repos-scrapy-2.16.0.scrapy.utils.defer.maybe_deferred_to_future",
+      "type": "suspected",
+      "description": "交叉证据置信偏低 (min_confidence=0.28，可能来自动态补边)，主线 dlmw、pipeline 在此交汇，降级为疑似/待确认。",
+      "involved_lines": [
+        "line_dlmw",
+        "line_pipeline"
+      ]
+    }
+  ]
+}

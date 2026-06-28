@@ -228,7 +228,9 @@ class TaintWorker:
             current_file=None,
             candidates=candidates,
         )
-        reply = await asyncio.to_thread(self.llm.chat, SYSTEM_PROMPT, window)
+        # temperature=0: classification should be reproducible, not creative —
+        # borderline first-party nodes must not flip continue/noise between runs.
+        reply = await asyncio.to_thread(self.llm.chat, SYSTEM_PROMPT, window, temperature=0.0)
         try:
             data = reply.json()
         except Exception:  # noqa: BLE001 - malformed JSON: treat as all-noise, don't crash

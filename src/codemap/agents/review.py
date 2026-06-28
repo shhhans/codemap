@@ -323,7 +323,8 @@ class ReviewAgent:
         for attempt in range(MAX_RETRIES + 1):
             window = _build_evidence_window(ev, extra)
             try:
-                reply = await asyncio.to_thread(self.llm.chat, REVIEW_SYSTEM_PROMPT, window)
+                reply = await asyncio.to_thread(self.llm.chat, REVIEW_SYSTEM_PROMPT, window,
+                                                temperature=0.0)
                 data = reply.json()
             except Exception:  # noqa: BLE001 - LLM down / unparseable → honest 'suspected'
                 return "suspected", self._suspected_desc(ev), None
