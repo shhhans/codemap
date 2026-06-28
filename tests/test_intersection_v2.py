@@ -215,3 +215,65 @@ async def test_insufficient_context_reinvestigates_then_settles(board: Blackboar
     verdict, _ = await rev._judge(await rev._assemble_evidence(A_PARSE))
     assert verdict == "suspected"
     assert llm.calls == 3  # initial + MAX_RETRIES(2)
+
+
+# ── Shared-ancestor inheritance (the _downstream fix) ────────────────────────
+SX, SY, C_HUB, D_DOWN = "app.x.sx", "app.y.sy", "app.core.c", "app.core.d"
+HUB_CALLS = [(SX, C_HUB), (SY, C_HUB), (C_HUB, D_DOWN)]
+
+
+@pytest.fixture()
+def hub_board(tmp_path: Path) -> Blackboard:
+    """Two flows that both reach D only by passing through a shared hub C.
+
+    flowX: sx → C → D      flowY: sy → C → D
+    C and D are both crossings; D is C's private downstream helper (fan-in 1),
+    structurally just like codemap's _downstream under expand_one.
+    """
+    bb = Blackboard(tmp_path / "hb.sqlite")
+    bb.register_mainline("line_x", "x", "X", "#1E90FF")
+    bb.register_mainline("line_y", "y", "Y", "#F4A261")
+    for nid, nm in [(SX, "sx"), (SY, "sy"), (C_HUB, "c"), (D_DOWN, "d")]:
+        bb.upsert_node(Node(id=nid, name=nm, type="processor"))
+
+    def t(node, flow, depth, parent):
+        bb.log_trace(Trace(agent_id=flow, node_id=node, flow_type=flow,
+                           node_role="processor", depth=depth, parent_node_id=parent))
+    t(SX, "x", 0, None)
+    t(C_HUB, "x", 1, SX)
+    t(D_DOWN, "x", 2, C_HUB)
+    t(SY, "y", 0, None)
+    t(C_HUB, "y", 1, SY)
+    t(D_DOWN, "y", 2, C_HUB)
+    yield bb
+    bb.close()
+
+
+async def test_downstream_of_shared_hub_has_shared_ancestor(hub_board: Blackboard) -> None:
+    rev = ReviewAgent(mcp=FakeGraph(HUB_CALLS), llm=FakeLLM(), blackboard=hub_board, project="stub")
+    ev = await rev._assemble_evidence(D_DOWN)
+    assert ev.shared_ancestor == C_HUB        # both flows reached D through C
+    ev_c = await rev._assemble_evidence(C_HUB)
+    assert ev_c.shared_ancestor is None        # the hub itself forks the two flows
+
+
+async def test_private_downstream_inherits_hub_verdict_without_llm(hub_board: Blackboard) -> None:
+    # C is judged healthy by the LLM; D must INHERIT healthy deterministically —
+    # if it wrongly re-asked the LLM it would get the scripted 'dangerous'.
+    llm = FakeLLM(replies=[{"verdict": "healthy", "description": "C is a shared hub"},
+                           {"verdict": "dangerous", "description": "should never be used"}])
+    rev = ReviewAgent(mcp=FakeGraph(HUB_CALLS), llm=llm, blackboard=hub_board, project="stub")
+    results = {r.name: r for r in await rev.review_all()}
+    assert results["c"].verdict == "healthy"
+    assert results["d"].verdict == "healthy"   # inherited, not LLM-judged
+    assert llm.calls == 1                       # only C went to the LLM
+
+
+async def test_inheritance_is_direction_neutral(hub_board: Blackboard) -> None:
+    # A shared *dangerous* hub propagates dangerous to its downstream, too.
+    llm = FakeLLM(replies=[{"verdict": "dangerous", "description": "C taps a private result"}])
+    rev = ReviewAgent(mcp=FakeGraph(HUB_CALLS), llm=llm, blackboard=hub_board, project="stub")
+    results = {r.name: r for r in await rev.review_all()}
+    assert results["c"].verdict == "dangerous"
+    assert results["d"].verdict == "dangerous"  # inherits the hub's verdict
+    assert llm.calls == 1

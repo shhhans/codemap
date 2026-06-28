@@ -92,6 +92,13 @@ class Evidence:
     fan_in: int
     min_confidence: float
     body: str
+    # The nearest upstream node that is itself a crossing and lies on EVERY
+    # flow's path to X. If present, all flows reached X through a common shared
+    # hub (not via independent taps), so X's crossing is inherited, not a fork-
+    # point of its own — the discriminator that tells a hub's private downstream
+    # apart from a real cross-line tap.
+    shared_ancestor: str | None = None
+    shared_ancestor_name: str | None = None
     incomplete: bool = False                # evidence-gathering hit a budget/error
 
     @property
@@ -117,13 +124,32 @@ class ReviewAgent:
     project: str
 
     async def review_all(self) -> list[ReviewResult]:
+        # Shallow crossings first: a deeper crossing reached by all its flows
+        # through an already-judged shared crossing inherits that verdict.
+        crossings = sorted(self.blackboard.intersections(),
+                           key=lambda c: self.blackboard.node_min_depth(c.node_id))
         results: list[ReviewResult] = []
-        for crossing in self.blackboard.intersections():
+        for crossing in crossings:
             results.append(await self._review_one(crossing.node_id))
         return results
 
     async def _review_one(self, node_id: str) -> ReviewResult:
         ev = await self._assemble_evidence(node_id)
+
+        # Inheritance: if every flow reached X through a common upstream crossing
+        # that already has a verdict, X is transitively shared via that hub (not
+        # an independent tap) — inherit its verdict deterministically, direction-
+        # neutral (a shared *dangerous* ancestor propagates dangerous too). This
+        # removes the LLM nondeterminism on a hub's private downstream helpers.
+        if ev.shared_ancestor:
+            inherited = self.blackboard.get_verdict(ev.shared_ancestor)
+            if inherited:
+                desc = (f"两条主线均经共享上游枢纽 {ev.shared_ancestor_name}()（已判定为"
+                        f"「{inherited}」）抵达此处，属于该枢纽的下游、并非独立摄取，继承其判定。")
+                self.blackboard.record_verdict(node_id, inherited, desc)
+                return ReviewResult(node_id=node_id, name=ev.name, verdict=inherited,
+                                    description=desc, flows=ev.flows, evidence=ev)
+
         verdict, description = await self._judge(ev)
         self.blackboard.record_verdict(node_id, verdict, description)
         return ReviewResult(node_id=node_id, name=ev.name, verdict=verdict,
@@ -150,11 +176,39 @@ class ReviewAgent:
             fan_in, incomplete = -1, True
 
         body = await self._body(node_id)
+        anc = self._shared_ancestor(node_id, paths)
+        anc_node = self.blackboard.get_node(anc) if anc else None
         return Evidence(
             node_id=node_id, name=name, roles=roles, paths=paths, bypasses=bypasses,
             fan_in=fan_in, min_confidence=self.blackboard.min_confidence(node_id),
-            body=body, incomplete=incomplete,
+            body=body,
+            shared_ancestor=anc,
+            shared_ancestor_name=(anc_node.name if anc_node else
+                                  (anc.rsplit(".", 1)[-1] if anc else None)),
+            incomplete=incomplete,
         )
+
+    def _shared_ancestor(self, node_id: str, paths: dict[str, list[str]]) -> str | None:
+        """The nearest crossing that lies on every flow's path to `node_id`.
+
+        If all flows reached node_id through a common node that is itself a
+        crossing, node_id is downstream of a shared hub (transitively shared, not
+        independently tapped). Returns the deepest such node (nearest to X)."""
+        if len(paths) < 2:
+            return None
+        common: set[str] | None = None
+        for p in paths.values():
+            here = set(p) - {node_id}
+            common = here if common is None else (common & here)
+        if not common:
+            return None
+        crossings = {c.node_id for c in self.blackboard.intersections()}
+        cands = [n for n in common if n in crossings]
+        if not cands:
+            return None
+        # Nearest to X = appears latest along a (shared) path.
+        ref = next(iter(paths.values()))
+        return max(cands, key=lambda n: ref.index(n) if n in ref else -1)
 
     async def _find_bypasses(self, node_id: str, roles: list[tuple[str, str]],
                              paths: dict[str, list[str]]) -> list[Bypass]:
@@ -304,6 +358,13 @@ def _build_evidence_window(ev: Evidence, extra: str = "") -> str:
         by_lines,
         f"[全局扇入 (指向 healthy/公共枢纽)]: {fanin} {hub_hint}",
         f"[本交叉最低置信度]: {ev.min_confidence:.2f}",
+    ]
+    if ev.shared_ancestor_name:
+        lines.append(
+            f"[共享上游枢纽 (指向 healthy)]: 两条主线均经过 {ev.shared_ancestor_name}() 抵达本节点"
+            "，说明这是经同一个公共枢纽到达的下游，而非独立越级摄取"
+        )
+    lines += [
         "[节点源码]:",
         ev.body,
     ]

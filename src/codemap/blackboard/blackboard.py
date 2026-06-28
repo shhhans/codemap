@@ -208,6 +208,22 @@ class Blackboard:
         ).fetchall()
         return [(r["node_id"], r["node_role"]) for r in rows]
 
+    def node_min_depth(self, node_id: str) -> int:
+        """Shallowest depth any flow reached this node — used to review crossings
+        in topological (seed-outward) order so a deeper crossing can inherit the
+        verdict of a shared upstream crossing all its flows passed through."""
+        row = self._conn.execute(
+            "SELECT MIN(depth) AS d FROM traces WHERE node_id = ?", (node_id,)
+        ).fetchone()
+        return int(row["d"]) if row and row["d"] is not None else 0
+
+    def get_verdict(self, node_id: str) -> str | None:
+        """The recorded verdict for a crossing, or None if not yet reviewed."""
+        row = self._conn.execute(
+            "SELECT verdict FROM intersection_verdicts WHERE node_id = ?", (node_id,)
+        ).fetchone()
+        return row["verdict"] if row else None
+
     def min_confidence(self, node_id: str) -> float:
         """Lowest taint-decision confidence recorded for a node across all flows.
 
