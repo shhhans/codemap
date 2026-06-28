@@ -158,10 +158,15 @@ Agent 最终输出一张用于渲染"地铁图"的 JSON 地图。权威 JSON Sch
   被调用名，对图中**唯一同名**的 Function/Method 补一条 `recovered=True` 的低 confidence
   (×0.8) 候选边。补边后 Coordinator→Worker 的换乘骨干得以在自身狗粮图中显现。
 
-> **待改进（狗粮发现）**：当前评审启发式「任一主线视其为 processor 即判 dangerous」会把
-> **设计上就该共享的工具节点**（如 `expand_one`/`_downstream` 这类多驱动复用的核心原语）
-> 误报为职责污染。真正的污染（fixture 的 `parse_jwt`）是「跨线摄取某主线的私有中间结果」，
-> 与「共享公共工具」需进一步区分（例如看节点是否为某主线的私有实现 vs 公共 API）。
+- **M5 评审升维（V2.1）** ✅：修复狗粮暴露的「评审过度报警」。旧启发式「任一主线视其为
+  processor 即判 dangerous」会把**设计上就该共享的工具节点**（`expand_one`/`_downstream` 等
+  多驱动复用的核心原语）误报为职责污染。V2.1 把判定从「二元角色」升级为「关系判定」：
+  新增 `traces.parent_node_id` 重建各主线到交叉点的路径，取证**门面绕行（越级摄取）** +
+  全局扇入/Leiden 社区，交由 LLM 做 **healthy / dangerous / suspected** 三态裁决（确定性逻辑
+  只取证、绝不硬判 dangerous，离线/低置信降级 suspected）。实测：聚焦狗粮
+  `_walk × _scheduler` 下共享原语 0 误报（expand_one/_classify 判 healthy、_downstream 判
+  suspected），fixture 真污染 `parse_jwt` 仍正确标红。设计见
+  [`docs/v2_intersection_design.md`](./docs/v2_intersection_design.md)。
 
 ## 8. 已知风险与设计决策
 

@@ -273,9 +273,39 @@ python scripts/render_subway.py web/subway_map.png
 |----|------|
 | 短名歧义（假阳性） | ✅ 已修复（qualified_name 精确解析） |
 | 动态分发边丢失（假阴性） | ✅ 已修复（名称匹配补边，低置信） |
-| 评审过度报警（概念缺口） | ⚠ **已定位、未修复**——需引入"公共枢纽"公民与归属判定 |
+| 评审过度报警（概念缺口） | ✅ **已修复（V2.1）**——见 §8 与 [`v2_intersection_design.md`](./v2_intersection_design.md) |
 | Coordinator / Worker / Blackboard / Review | ✅ M1–M4 跑通，真实 LLM |
 
 > 本报告的核心主张：**"过度报警"不是一个 bug，而是公民体系的一处结构性缺口**。
-> 在补齐"公共枢纽"这类公民、并引入"私有 vs 公共"的归属判定之前，工具对真实代码库的
-> 交叉点定性会系统性偏向"危险"。这是下一阶段最值得投入的方向。
+> V2.1 沿这个主张落地了修复（§8）：不新增"公共枢纽"硬标签，而是把"私有 vs 公共"的归属
+> 判定上移到延迟评审，用拓扑证据让 LLM 自行识别。
+
+---
+
+## 8. 后续：V2.1 已修复（实测复盘）
+
+完整设计见 [`v2_intersection_design.md`](./v2_intersection_design.md)。核心改动：
+
+- **Role 降格为局部意见**：`node_role`(sink/processor) 只是 Worker 1-hop 的局部看法；
+  节点的"户籍"（私有内部件 vs 公共枢纽）改由**延迟评审**用全局拓扑判定。
+- **污染是关系，不是属性**：评审不再看"是不是 processor"，而是取证
+  **「门面绕行 (越级摄取)」**——某主线是否绕过另一主线暴露的稳定门面、直取其私有半成品。
+  门面经 `traces.parent_node_id`（新增）重建路径 + `CALLS*1..3` 可达性取证。
+- **三态 + 机器不定罪**：`healthy / dangerous / suspected`。确定性逻辑只取证，
+  **只有 LLM 能判 dangerous**；离线/低置信/反刍超限一律降级 `suspected`（黄）。
+
+**实测（codebase-memory-mcp v0.8.1 + MiniMax-M3）**：
+
+复刻本报告 §4 的聚焦狗粮 `TaintWorker._walk × Coordinator._scheduler`（depth 4，
+脚本 `scripts/exp_overalert.py`），两条驱动在共享 worker 原语上交汇：
+
+```
+expand_one  → ✓ healthy    （旧规则下的头号误报，现判公共枢纽）
+_classify   → ✓ healthy
+_downstream → ? suspected  （证据不足，诚实标黄，而非硬判红）
+tally: {healthy: 2, suspected: 1}   ← 0 dangerous
+```
+
+对照本报告 §4.1：**补边前同一批共享原语曾被全判 `dangerous`**。V2.1 下 0 误报。
+fixture 侧（`m3_concurrent`）的真污染仍被正确标红：`parse_jwt → dangerous`、
+`get_current_user → healthy`——既治了假阳性，又没放过真污染。
