@@ -84,7 +84,7 @@ async def _run(args: argparse.Namespace) -> int:
 
             out_json = write_subway_map(db, args.out)
             print(f"\n✓ Subway map exported → {out_json}")
-            print(f"  Render with: python scripts/render_subway.py web/subway_map.png")
+            print("  Render with: python scripts/render_subway.py web/subway_map.png")
             blackboard.close()
             return 0
 
