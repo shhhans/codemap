@@ -153,13 +153,19 @@ Coordinator 在 `queue.join()` 收敛后唤醒评审。此时全局上下文齐�
 
 LLM 可输出 `insufficient_context`（附 `target_node_id` + 疑问理由），要求补充侦查：
 
-- **per-node 计数器** `investigation_retries`（Max=2）：每补一次上下文（拉 target 的方法体 /
-  其调用者）后二次开庭。
-- **全局轮数上限**：整轮反刍也设上限，防多案交替拖死。
+- **per-node 计数器** `MAX_RETRIES`（=2）：每补一次上下文（拉 target 的方法体 /
+  其调用者）后二次开庭——**评审层内**的有界二次取证（`review.py:_judge` / `_more_context`）。
+- **全局轮数上限** `max_reflux_rounds`（=2）：**Coordinator 级**的队列重注入式反刍——评审层
+  retries 耗尽仍 `insufficient_context` 时，不静默落黄，而是回传 `RefluxRequest(target)`；
+  Coordinator 把 target 压回 frontier（`_queue.put_nowait`）、重新 `_drain` 探索、再
+  **只复审这些悬而未决的交叉**（`review_all(targets=…)`），整轮设上限防多案交替拖死。
 - **超限即降级**：任一上限触顶 → 锁定 `suspected`（黄），不硬判。
 
-> 本阶段先实现**评审层内**的有界二次取证（满足护栏精神、可独立运行）；
-> Coordinator 级的队列重注入式反刍（把特种侦探 Task 压回队列）留作后续增强。
+> 两级反刍现已落地：评审层内有界取证（`_judge`）＋ Coordinator 级队列重注入
+> （`coordinator.py:_reflux` / `_drain`，把"特种侦探 Task"压回队列）。
+> 工程性质说明：在当前引擎上，重注入主要保证 LLM 指向的 target 邻域被物化、并授予一轮
+> 有界的全局复审；它**不会凭空捏造图边**——目标已被探索过则为廉价空操作，未被探索过才
+> 真正新增侦查。
 
 ### 3.6 路径爆炸护栏（落实顾问的担忧）
 

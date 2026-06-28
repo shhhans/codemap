@@ -167,6 +167,14 @@ Agent 最终输出一张用于渲染"地铁图"的 JSON 地图。权威 JSON Sch
   `_walk × _scheduler` 下共享原语 0 误报（expand_one/_classify 判 healthy、_downstream 判
   suspected），fixture 真污染 `parse_jwt` 仍正确标红。设计见
   [`docs/v2_intersection_design.md`](./docs/v2_intersection_design.md)。
+- **M6 反刍 / 回归 / 成本量化** ✅：补齐 V2.1 的三块收尾。
+  ① **Coordinator 级队列重注入反刍**（`coordinator.py:_reflux`/`_drain`）：评审层 retries
+  耗尽仍 `insufficient_context` 时回传 `RefluxRequest`，把 target 压回 frontier 重新探索、
+  再只复审悬而未决的交叉，`max_reflux_rounds` 为终止护栏。
+  ② **真污染回归**（`scripts/exp_pollution.py` + `tests/test_intersection_v2.py`）：锁定
+  `parse_jwt→dangerous` / `get_current_user→healthy`，防过度报警的修复反向漏判。
+  ③ **Prompt-Cache 成本量化**（`llm.py:UsageMeter` + `scripts/exp_cache_cost.py`）：按
+  `prompt_tokens_details.cached_tokens` 实测缓存命中率与省下的费用，不再靠假设。
 
 ## 8. 已知风险与设计决策
 
@@ -175,4 +183,4 @@ Agent 最终输出一张用于渲染"地铁图"的 JSON 地图。权威 JSON Sch
 | ~~MCP 工具真实 schema 未知，上层全依赖它~~ ✅ 已解决 | M1 已固化真实契约于 `docs/mcp_tools_contract.json`（v0.8.1 实测） |
 | LLM 污点判定会误判（漏判断线 / 误判污染） | 每次判定带 confidence；低置信降级标记不直接剪 |
 | DFS + Fork 指数爆炸 / 环形调用死循环 | `MAX_DEPTH` / `MAX_WORKERS` + `traces` 去重 visited |
-| Minimax / Dashscope 的 Prompt Cache 行为与 Anthropic 不同，成本模型可能崩 | 早期独立验证两家 cache 命中是否真省钱 |
+| Minimax / Dashscope 的 Prompt Cache 行为与 Anthropic 不同，成本模型可能崩 | `llm.py:UsageMeter` 按 `cached_tokens` 实测命中率，`scripts/exp_cache_cost.py` 跑真实负载量化省下的费用——不再假设 |

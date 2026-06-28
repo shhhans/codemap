@@ -35,6 +35,70 @@ class LLMReply:
         return _extract_json(self.text)
 
 
+@dataclass
+class UsageMeter:
+    """Run-level token accounting, so we can *measure* prompt-cache savings
+    rather than assume them (ARCHITECTURE risk table).
+
+    OpenAI-compatible endpoints (MiniMax / Dashscope) report server-side prompt
+    caching via ``usage.prompt_tokens_details.cached_tokens``. A high
+    ``cache_hit_rate`` means the large leading System Prompt is being reused —
+    the design's whole bet (keep the system prompt fixed, only append the
+    sliding window). When the field is absent we count zero cached tokens (an
+    honest floor, not an optimistic guess)."""
+
+    calls: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    cached_tokens: int = 0
+
+    def add(self, usage: dict[str, Any] | None) -> None:
+        if not usage:
+            return
+        self.calls += 1
+        self.prompt_tokens += int(usage.get("prompt_tokens") or 0)
+        self.completion_tokens += int(usage.get("completion_tokens") or 0)
+        details = usage.get("prompt_tokens_details") or {}
+        # Some endpoints nest it; a few flatten it to `cached_tokens` at top level.
+        self.cached_tokens += int(
+            (details.get("cached_tokens") if isinstance(details, dict) else 0)
+            or usage.get("cached_tokens") or 0
+        )
+
+    @property
+    def total_tokens(self) -> int:
+        return self.prompt_tokens + self.completion_tokens
+
+    @property
+    def cache_hit_rate(self) -> float:
+        """Fraction of prompt tokens served from cache (0..1)."""
+        return self.cached_tokens / self.prompt_tokens if self.prompt_tokens else 0.0
+
+    def cost(self, in_per_mtok: float, out_per_mtok: float, cached_discount: float = 0.1) -> dict:
+        """Illustrative cost given per-million-token prices. Cached input tokens
+        are billed at ``cached_discount`` of the input price (provider-specific;
+        ~0.1 is typical). Returns billed/uncached costs so the saving is explicit."""
+        fresh = self.prompt_tokens - self.cached_tokens
+        billed_in = (fresh + self.cached_tokens * cached_discount) / 1_000_000 * in_per_mtok
+        billed_out = self.completion_tokens / 1_000_000 * out_per_mtok
+        nocache_in = self.prompt_tokens / 1_000_000 * in_per_mtok
+        return {
+            "billed_usd": round(billed_in + billed_out, 6),
+            "no_cache_usd": round(nocache_in + billed_out, 6),
+            "saved_usd": round(nocache_in - billed_in, 6),
+        }
+
+    def summary(self) -> dict[str, Any]:
+        return {
+            "calls": self.calls,
+            "prompt_tokens": self.prompt_tokens,
+            "completion_tokens": self.completion_tokens,
+            "cached_tokens": self.cached_tokens,
+            "total_tokens": self.total_tokens,
+            "cache_hit_rate": round(self.cache_hit_rate, 4),
+        }
+
+
 class LLMClient:
     def __init__(self, llm_config: LLMConfig | None = None):
         self.cfg = llm_config or config.llm()
@@ -48,6 +112,9 @@ class LLMClient:
         except ImportError as exc:  # pragma: no cover
             raise LLMError("The 'openai' package is required. Install with: pip install -e .") from exc
         self._client = OpenAI(api_key=self.cfg.api_key, base_url=self.cfg.base_url)
+        # Accumulates token usage across every call this client makes — the
+        # whole run shares one client, so this is the run's total.
+        self.usage = UsageMeter()
 
     def chat(
         self,
@@ -86,6 +153,7 @@ class LLMClient:
 
         text = resp.choices[0].message.content or ""
         usage = resp.usage.model_dump() if getattr(resp, "usage", None) else None
+        self.usage.add(usage)
         return LLMReply(text=text, usage=usage)
 
     def ping(self) -> LLMReply:

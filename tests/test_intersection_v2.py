@@ -21,7 +21,9 @@ from pathlib import Path
 
 import pytest
 
+from codemap.agents.coordinator import Coordinator
 from codemap.agents.review import PUBLIC_HUB_FANIN, ReviewAgent
+from codemap.agents.worker import TaintWorker
 from codemap.blackboard import Blackboard, Node, Trace
 
 # Fixture-shaped qualified names.
@@ -186,7 +188,7 @@ async def test_low_confidence_crossing_is_suspected_without_llm(board: Blackboar
     bb.log_trace(Trace(agent_id="billing", node_id="app.dyn.x", flow_type="billing",
                        node_role="processor", depth=1, parent_node_id=B_CHARGE, confidence=0.64))
     llm = FakeLLM(replies=[{"verdict": "dangerous", "description": "should be ignored"}])
-    verdict, _ = await _reviewer(bb, llm)._judge(
+    verdict, _, _ = await _reviewer(bb, llm)._judge(
         await _reviewer(bb, llm)._assemble_evidence("app.dyn.x"))
     assert verdict == "suspected"  # low confidence → never reaches the LLM
     assert llm.calls == 0
@@ -195,7 +197,7 @@ async def test_low_confidence_crossing_is_suspected_without_llm(board: Blackboar
 async def test_llm_unavailable_degrades_to_suspected_not_dangerous(board: Blackboard) -> None:
     llm = FakeLLM(raise_exc=True)
     rev = _reviewer(board, llm)
-    verdict, _ = await rev._judge(await rev._assemble_evidence(A_PARSE))
+    verdict, _, _ = await rev._judge(await rev._assemble_evidence(A_PARSE))
     assert verdict == "suspected"  # the old code hard-defaulted to dangerous here
 
 
@@ -203,7 +205,7 @@ async def test_llm_can_return_each_ternary_state(board: Blackboard) -> None:
     for want in ("healthy", "dangerous"):
         llm = FakeLLM(replies=[{"verdict": want, "description": "x"}])
         rev = _reviewer(board, llm)
-        verdict, _ = await rev._judge(await rev._assemble_evidence(A_PARSE))
+        verdict, _, _ = await rev._judge(await rev._assemble_evidence(A_PARSE))
         assert verdict == want
 
 
@@ -212,9 +214,128 @@ async def test_insufficient_context_reinvestigates_then_settles(board: Blackboar
     llm = FakeLLM(replies=[{"verdict": "insufficient_context", "target_node_id": A_VERIFY,
                             "description": "need more"}] * 5)
     rev = _reviewer(board, llm)
-    verdict, _ = await rev._judge(await rev._assemble_evidence(A_PARSE))
+    verdict, _, target = await rev._judge(await rev._assemble_evidence(A_PARSE))
     assert verdict == "suspected"
     assert llm.calls == 3  # initial + MAX_RETRIES(2)
+    assert target == A_VERIFY  # the unresolved crossing surfaces a reflux target
+
+
+# ── Real-pollution regression: genuine 越级摄取 must still flag dangerous ──────
+async def test_real_pollution_still_flags_dangerous(board: Blackboard) -> None:
+    # Billing reaches Auth's INTERNAL parse_jwt without going through verify_token
+    # (the façade). The evidence layer must keep presenting this as dangerous-
+    # eligible — a bypass, a low (non-hub) fan-in, and NO shared-ancestor shortcut
+    # that would auto-resolve it — so the LLM's 'dangerous' verdict stands.
+    llm = FakeLLM(replies=[{"verdict": "dangerous",
+                            "description": "Billing 绕过 verify_token 直取 parse_jwt 的私有 claims"}])
+    res = await _reviewer(board, llm)._review_one(A_PARSE)
+    assert res.verdict == "dangerous"
+    assert res.reflux is None
+    assert board.get_verdict(A_PARSE) == "dangerous"
+    ev = res.evidence
+    assert ev is not None
+    assert ev.bypasses, "the bypass must remain visible to the judge"
+    assert ev.fan_in < PUBLIC_HUB_FANIN  # not a public hub → no healthy prior
+    assert ev.shared_ancestor is None    # not inherited away from the LLM
+
+
+async def test_stable_sink_crossing_stays_healthy(board: Blackboard) -> None:
+    # The OTHER crossing in the same fixture: both flows consume get_current_user
+    # as a stable sink — no façade is bypassed, so it must read healthy.
+    llm = FakeLLM(replies=[{"verdict": "healthy",
+                            "description": "两线均消费 Auth 稳定 sink get_current_user"}])
+    res = await _reviewer(board, llm)._review_one(A_GETUSER)
+    assert res.verdict == "healthy"
+    assert res.evidence is not None and res.evidence.bypasses == []
+
+
+# ── Coordinator-level reflux (queue reinjection, doc §3.5) ────────────────────
+P0, Q0, X = "app.p.p0", "app.q.q0", "app.shared.x"
+
+
+def _reflux_board(tmp_path: Path) -> Blackboard:
+    """Two distinct flows crossing on exactly one node X (no shared ancestor, so
+    it goes to the LLM). One crossing keeps the scripting unambiguous."""
+    bb = Blackboard(tmp_path / "rf.sqlite")
+    bb.register_mainline("line_p", "p", "P", "#1E90FF")
+    bb.register_mainline("line_q", "q", "Q", "#F4A261")
+    for nid, nm in [(P0, "p0"), (Q0, "q0"), (X, "x")]:
+        bb.upsert_node(Node(id=nid, name=nm, type="processor"))
+
+    def t(node, flow, depth, parent):
+        bb.log_trace(Trace(agent_id=flow, node_id=node, flow_type=flow,
+                           node_role="processor", depth=depth, parent_node_id=parent))
+    t(P0, "p", 0, None)
+    t(X, "p", 1, P0)
+    t(Q0, "q", 0, None)
+    t(X, "q", 1, Q0)
+    return bb
+
+
+def _coord(board: Blackboard, llm: object) -> Coordinator:
+    coord = Coordinator(mcp=FakeGraph([(P0, X), (Q0, X)]), llm=llm, blackboard=board,
+                        project="stub", max_workers=2)
+    for flow in ("p", "q"):
+        coord._workers[flow] = TaintWorker(
+            mcp=coord.mcp, llm=llm, project="stub", flow_type=flow, material="m",
+            blackboard=board, max_depth=4, agent_id=flow,
+        )
+    return coord
+
+
+async def test_unresolved_crossing_surfaces_reflux_request(tmp_path: Path) -> None:
+    bb = _reflux_board(tmp_path)
+    llm = FakeLLM(replies=[{"verdict": "insufficient_context", "target_node_id": X,
+                            "description": "need to see X deeper"}] * 3)
+    res = await _reviewer(bb, llm)._review_one(X)
+    assert res.verdict == "suspected"
+    assert res.reflux is not None
+    assert res.reflux.target == X and set(res.reflux.flows) == {"p", "q"}
+    bb.close()
+
+
+async def test_reflux_reinjects_then_resolves(tmp_path: Path) -> None:
+    bb = _reflux_board(tmp_path)
+    # Round 0: 3× insufficient_context → suspected + reflux. Round 1 re-review:
+    # the next reply (healthy) resolves it.
+    llm = FakeLLM(replies=[{"verdict": "insufficient_context", "target_node_id": X,
+                            "description": "need more"}] * 3
+                          + [{"verdict": "healthy", "description": "X is a shared util"}])
+    coord = _coord(bb, llm)
+    reviewer = ReviewAgent(mcp=coord.mcp, llm=llm, blackboard=bb, project="stub")
+    reviews = await reviewer.review_all()
+    assert reviews[0].verdict == "suspected" and reviews[0].reflux is not None
+    final, rounds, events = await coord._reflux(reviewer, reviews)
+    assert rounds == 1
+    assert events == [(1, [X])]                  # X was re-injected on round 1
+    assert final[0].verdict == "healthy"         # resolved after reflux
+    assert bb.get_verdict(X) == "healthy"
+    bb.close()
+
+
+class AlwaysInsufficient:
+    def __init__(self, target: str):
+        self.calls = 0
+        self.target = target
+
+    def chat(self, *_a: object, **_k: object) -> FakeReply:
+        self.calls += 1
+        return FakeReply({"verdict": "insufficient_context", "target_node_id": self.target,
+                          "description": "still unclear"})
+
+
+async def test_reflux_terminates_on_round_guard(tmp_path: Path) -> None:
+    bb = _reflux_board(tmp_path)
+    llm = AlwaysInsufficient(X)
+    coord = _coord(bb, llm)
+    coord.max_reflux_rounds = 2
+    reviewer = ReviewAgent(mcp=coord.mcp, llm=llm, blackboard=bb, project="stub")
+    reviews = await reviewer.review_all()
+    final, rounds, _ = await coord._reflux(reviewer, reviews)
+    assert rounds == 2                       # stopped at the guard, did not loop forever
+    assert final[0].verdict == "suspected"   # never hard-judged
+    assert bb.get_verdict(X) == "suspected"
+    bb.close()
 
 
 # ── Shared-ancestor inheritance (the _downstream fix) ────────────────────────

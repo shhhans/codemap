@@ -107,6 +107,20 @@ class Evidence:
 
 
 @dataclass
+class RefluxRequest:
+    """A crossing the reviewer could not resolve with the evidence on hand —
+    the LLM kept asking for context the current exploration never materialized.
+
+    Rather than silently settling on `suspected`, the reviewer surfaces this so
+    the Coordinator can re-inject `target` onto the worker frontier (queue
+    reinjection, doc §3.5), deepen the trace tree around it, and re-review. The
+    global round count is the termination guard."""
+    node_id: str          # the crossing left unresolved
+    target: str           # node the LLM wanted explored deeper
+    flows: list[str]      # mainlines involved in the crossing
+
+
+@dataclass
 class ReviewResult:
     node_id: str
     name: str
@@ -114,6 +128,9 @@ class ReviewResult:
     description: str
     flows: list[str]
     evidence: Evidence | None = None
+    # Set when the verdict is a *provisional* suspected that more worker
+    # exploration might resolve — drives Coordinator-level reflux.
+    reflux: RefluxRequest | None = None
 
 
 @dataclass
@@ -123,11 +140,15 @@ class ReviewAgent:
     blackboard: Blackboard
     project: str
 
-    async def review_all(self) -> list[ReviewResult]:
+    async def review_all(self, targets: set[str] | None = None) -> list[ReviewResult]:
         # Shallow crossings first: a deeper crossing reached by all its flows
         # through an already-judged shared crossing inherits that verdict.
         crossings = sorted(self.blackboard.intersections(),
                            key=lambda c: self.blackboard.node_min_depth(c.node_id))
+        # On a reflux round, `targets` restricts the re-review to the crossings
+        # that asked for more exploration — settled verdicts are left untouched.
+        if targets is not None:
+            crossings = [c for c in crossings if c.node_id in targets]
         results: list[ReviewResult] = []
         for crossing in crossings:
             results.append(await self._review_one(crossing.node_id))
@@ -150,10 +171,17 @@ class ReviewAgent:
                 return ReviewResult(node_id=node_id, name=ev.name, verdict=inherited,
                                     description=desc, flows=ev.flows, evidence=ev)
 
-        verdict, description = await self._judge(ev)
+        verdict, description, reflux_target = await self._judge(ev)
         self.blackboard.record_verdict(node_id, verdict, description)
+        # The LLM ran out of context it could not get from the assembled evidence
+        # alone — let the Coordinator deepen exploration around `reflux_target`
+        # and try again (bounded). Only insufficient_context produces this; a
+        # low-confidence or LLM-down 'suspected' is not an exploration problem.
+        reflux = (RefluxRequest(node_id=node_id, target=reflux_target, flows=ev.flows)
+                  if reflux_target else None)
         return ReviewResult(node_id=node_id, name=ev.name, verdict=verdict,
-                            description=description, flows=ev.flows, evidence=ev)
+                            description=description, flows=ev.flows, evidence=ev,
+                            reflux=reflux)
 
     # ── Evidence assembly (deterministic; never a verdict) ───────────────────
     async def _assemble_evidence(self, node_id: str) -> Evidence:
@@ -274,36 +302,48 @@ class ReviewAgent:
             return node_id
 
     # ── LLM judgment (ternary, with bounded re-investigation) ────────────────
-    async def _judge(self, ev: Evidence) -> tuple[str, str]:
+    async def _judge(self, ev: Evidence) -> tuple[str, str, str | None]:
+        """Return (verdict, description, reflux_target).
+
+        `reflux_target` is non-None only when the LLM still wants more context
+        after the in-reviewer retries are spent — the crossing settles on
+        provisional `suspected`, but the Coordinator may deepen exploration
+        around that node and re-review. All other paths return None."""
         # Low-confidence crossings (e.g. carried by a recovered dynamic edge) are
-        # never hard-judged — straight to 'suspected'.
+        # never hard-judged — straight to 'suspected'. Not a reflux candidate:
+        # more exploration won't lift a discounted dynamic edge's confidence.
         if ev.min_confidence < 0.85:
             return "suspected", (
                 f"交叉证据置信偏低 (min_confidence={ev.min_confidence:.2f}，可能来自动态补边)，"
                 f"主线 {('、'.join(ev.flows))} 在此交汇，降级为疑似/待确认。"
-            )
+            ), None
 
         extra = ""
+        last_target: str | None = None
         for attempt in range(MAX_RETRIES + 1):
             window = _build_evidence_window(ev, extra)
             try:
                 reply = await asyncio.to_thread(self.llm.chat, REVIEW_SYSTEM_PROMPT, window)
                 data = reply.json()
             except Exception:  # noqa: BLE001 - LLM down / unparseable → honest 'suspected'
-                return "suspected", self._suspected_desc(ev)
+                return "suspected", self._suspected_desc(ev), None
 
             verdict = data.get("verdict")
             description = data.get("description") or self._suspected_desc(ev)
             if verdict in {"healthy", "dangerous"}:
-                return verdict, description
-            if verdict == "insufficient_context" and attempt < MAX_RETRIES:
-                target = data.get("target_node_id") or ev.node_id
-                extra = await self._more_context(target)
-                continue
-            # Unknown verdict, or out of retries: settle on suspected.
-            return "suspected", description
+                return verdict, description, None
+            if verdict == "insufficient_context":
+                last_target = data.get("target_node_id") or ev.node_id
+                if attempt < MAX_RETRIES:
+                    extra = await self._more_context(last_target)
+                    continue
+                # Out of in-reviewer retries but still genuinely short on context
+                # → provisional suspected + a reflux request for the Coordinator.
+                return "suspected", description, last_target
+            # Unknown verdict: settle on suspected, no reflux.
+            return "suspected", description, None
 
-        return "suspected", self._suspected_desc(ev)
+        return "suspected", self._suspected_desc(ev), None
 
     async def _more_context(self, target: str) -> str:
         """Fetch extra evidence for a re-investigation round: the target's body
