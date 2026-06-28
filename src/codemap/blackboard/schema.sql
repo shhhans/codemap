@@ -38,6 +38,14 @@ CREATE TABLE IF NOT EXISTS traces (
     -- Low-confidence branches are kept (downgraded), never silently pruned.
     confidence  REAL NOT NULL DEFAULT 1.0,
     depth       INTEGER NOT NULL DEFAULT 0,
+    -- The node this flow arrived *from* when it first reached node_id (its DFS
+    -- predecessor). Because UNIQUE(node_id, flow_type) keeps the first check-in,
+    -- each flow's traces form a tree with a unique parent per node — walk these
+    -- pointers to reconstruct "the path by which flow F reached X" (V2.1). The
+    -- intersection reviewer needs that path to detect façade-bypass (越级摄取):
+    -- did flow B reach an internal node without passing through the stable
+    -- interface A exposes? NULL for a mainline's seed (Source).
+    parent_node_id TEXT,
     created_at  REAL NOT NULL DEFAULT (unixepoch('subsec')),
     UNIQUE (node_id, flow_type)
 );

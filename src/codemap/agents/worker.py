@@ -110,6 +110,7 @@ class TaintWorker:
             is_new = await self._record(
                 cand.ref, role=role, confidence=confidence, depth=depth + 1,
                 reason=reason, name=cand.name, file_path=cand.file_path,
+                parent=qualified_name,
             )
             # Descend only into fresh, non-sink nodes.
             if is_new and not is_sink:
@@ -237,10 +238,14 @@ class TaintWorker:
     # ── Bookkeeping ──────────────────────────────────────────────────────────
     async def _record(self, qualified_name: str, *, role: str, confidence: float, depth: int,
                        reason: str, name: str | None = None,
-                       file_path: str | None = None) -> bool:
+                       file_path: str | None = None, parent: str | None = None) -> bool:
         """Record a retained node. Returns True if this flow had not visited it
         before (the shared Blackboard is the source of truth when present, so
-        concurrent workers on the same flow dedup correctly)."""
+        concurrent workers on the same flow dedup correctly).
+
+        `parent` is the node this flow arrived *from* (None for the seed). It is
+        free here — expand_one already holds the predecessor's qualified_name —
+        and lets the reviewer reconstruct this mainline's path to the node."""
         node = RetainedNode(
             qualified_name=qualified_name, name=name or qualified_name.rsplit(".", 1)[-1],
             role=role, confidence=confidence, depth=depth, reason=reason, file_path=file_path,
@@ -260,7 +265,7 @@ class TaintWorker:
         # which is exactly the per-flow visited check.
         return self.blackboard.log_trace(
             Trace(agent_id=self.agent_id, node_id=qualified_name, flow_type=self.flow_type,
-                  node_role=role, confidence=confidence, depth=depth)
+                  node_role=role, confidence=confidence, depth=depth, parent_node_id=parent)
         )
 
 

@@ -91,19 +91,25 @@ function render(data) {
     el("text", { x: colX[li] + 16, y: 97, class: "name" }, svg, ln.name);
   });
 
-  // ── Dangerous crossings: an off-mainline red connector between the lines ──
+  // ── Dangerous / suspected crossings: an off-mainline connector between the
+  // lines. Red = confirmed pollution; yellow (dashed) = suspected/undecided.
+  const CONNECTOR = {
+    dangerous: { color: "#ff4d4f", label: "⚠ 职责污染：跨线摄取中间结果" },
+    suspected: { color: "#f0b400", label: "? 疑似交叉：证据不足，待确认" },
+  };
   for (const nid in nodeLines) {
     const lis = [...nodeLines[nid]];
-    if (lis.length > 1 && verdict[nid] === "dangerous") {
+    const c = CONNECTOR[verdict[nid]];
+    if (lis.length > 1 && c) {
       const ps = lis.map(li => perLine[li + "|" + nid]);
       for (let k = 0; k < ps.length - 1; k++) {
         const a = ps[k], b = ps[k + 1], mx = (a.x + b.x) / 2;
         // a gently bowed dashed link so it reads as "outside" the rails
         el("path", { d: `M ${a.x} ${a.y} Q ${mx} ${(a.y + b.y) / 2 - 34} ${b.x} ${b.y}`,
-                     fill: "none", stroke: "#ff4d4f", "stroke-width": 3.5,
+                     fill: "none", stroke: c.color, "stroke-width": 3.5,
                      "stroke-dasharray": "10 6", opacity: 0.95 }, svg);
-        el("text", { x: mx, y: (a.y + b.y) / 2 - 42, class: "badge", fill: "#ff4d4f",
-                     "text-anchor": "middle" }, svg, "⚠ 职责污染：跨线摄取中间结果");
+        el("text", { x: mx, y: (a.y + b.y) / 2 - 42, class: "badge", fill: c.color,
+                     "text-anchor": "middle" }, svg, c.label);
       }
     }
   }
@@ -128,7 +134,9 @@ function render(data) {
   const xs = data.intersections;
   document.getElementById("subtitle").textContent =
     `${data.mainlines.length} 条主线 · ${data.nodes.length} 个站点 · ${xs.length} 个换乘点` +
-    `（${xs.filter(i => i.type === "dangerous").length} 危险 / ${xs.filter(i => i.type === "healthy").length} 健康）`;
+    `（${xs.filter(i => i.type === "dangerous").length} 危险 / ` +
+    `${xs.filter(i => i.type === "suspected").length} 疑似 / ` +
+    `${xs.filter(i => i.type === "healthy").length} 健康）`;
   buildLegend();
 }
 
@@ -151,6 +159,9 @@ function drawStation(svg, p, node, color, verdict, isMerged) {
   if (verdict === "dangerous") {
     el("circle", { cx: p.x, cy: p.y, r: 22, fill: "none", stroke: "#ff4d4f",
                    "stroke-width": 3, "stroke-dasharray": "4 3" }, svg);
+  } else if (verdict === "suspected") {
+    el("circle", { cx: p.x, cy: p.y, r: 22, fill: "none", stroke: "#f0b400",
+                   "stroke-width": 3, "stroke-dasharray": "4 3" }, svg);
   }
 }
 
@@ -172,6 +183,9 @@ function drawLabel(svg, p, node, nid, li, nLines, isMerged, verdict) {
   if (verdict === "dangerous") {
     el("text", { x, y: y0 + 47, class: "badge", "text-anchor": anchor, fill: "#ff4d4f" }, svg,
        "⚠ 危险换乘 · 职责污染");
+  } else if (verdict === "suspected") {
+    el("text", { x, y: y0 + 47, class: "badge", "text-anchor": anchor, fill: "#f0b400" }, svg,
+       "? 疑似换乘 · 待确认");
   } else if (verdict === "healthy") {
     el("text", { x, y: y0 + (isMerged ? 16 : 47), class: "badge", "text-anchor": anchor, fill: "#28c76f" }, svg,
        "✓ 健康换乘");
@@ -187,7 +201,8 @@ function buildLegend() {
     ["沉淀点 Sink (方块)", "swatch sq", "#3366FF"],
     ["健康换乘站 (白点·绿环)", "swatch", "#fff"],
     ["⚠ 危险换乘 / 职责污染 (红环)", "swatch", "#ff4d4f"],
-    ["⚠ 主线外红色虚线 = 跨线污染连接", "swatch", "#ff4d4f"],
+    ["? 疑似换乘 / 待确认 (黄环)", "swatch", "#f0b400"],
+    ["主线外虚线 = 跨线连接 (红=污染 / 黄=疑似)", "swatch", "#ff4d4f"],
   ];
   for (const [label, cls, color] of items) {
     const s = document.createElement("span");

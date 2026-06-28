@@ -122,8 +122,10 @@ def _report(result, blackboard: Blackboard) -> None:
     print("\n═══ Intersections (换乘枢纽) ═══")
     if not result.reviews:
         print("  (none detected)")
+    icons = {"dangerous": "⚠ 危险交叉 / 职责污染", "suspected": "? 疑似交叉 / 待确认",
+             "healthy": "✓ 健康交叉"}
     for r in result.reviews:
-        icon = "⚠ 危险交叉 / 职责污染" if r.verdict == "dangerous" else "✓ 健康交叉"
+        icon = icons.get(r.verdict, "? 疑似交叉 / 待确认")
         print(f"\n  {icon}  —  {r.name}()   [{' × '.join(r.flows)}]")
         print(f"     {r.description}")
 

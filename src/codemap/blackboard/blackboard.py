@@ -35,6 +35,9 @@ class Trace:
     node_role: str = "processor"
     confidence: float = 1.0
     depth: int = 0
+    # The predecessor this flow arrived from (None for the seed). Stored so the
+    # reviewer can reconstruct each mainline's path to a crossing (V2.1).
+    parent_node_id: str | None = None
 
 
 @dataclass
@@ -90,8 +93,10 @@ class Blackboard:
         """
         cur = self._conn.execute(
             """
-            INSERT INTO traces (agent_id, node_id, flow_type, node_role, confidence, depth)
-            VALUES (:agent_id, :node_id, :flow_type, :node_role, :confidence, :depth)
+            INSERT INTO traces
+                (agent_id, node_id, flow_type, node_role, confidence, depth, parent_node_id)
+            VALUES
+                (:agent_id, :node_id, :flow_type, :node_role, :confidence, :depth, :parent_node_id)
             ON CONFLICT(node_id, flow_type) DO NOTHING
             """,
             trace.__dict__,
@@ -119,8 +124,13 @@ class Blackboard:
         ]
 
     def record_verdict(self, node_id: str, verdict: str, description: str = "") -> None:
-        if verdict not in {"healthy", "dangerous"}:
-            raise ValueError(f"verdict must be 'healthy' or 'dangerous', got {verdict!r}")
+        # V2.1: a third state. 'suspected' (黄) is the honest fallback whenever the
+        # LLM judge is unavailable/unparseable or the evidence is low-confidence —
+        # deterministic logic never hard-judges 'dangerous'.
+        if verdict not in {"healthy", "dangerous", "suspected"}:
+            raise ValueError(
+                f"verdict must be 'healthy', 'dangerous' or 'suspected', got {verdict!r}"
+            )
         self._conn.execute(
             """
             INSERT INTO intersection_verdicts (node_id, verdict, description)
@@ -163,6 +173,51 @@ class Blackboard:
             (flow_type,),
         ).fetchall()
         return [r["node_id"] for r in rows]
+
+    # ── V2.1: evidence the intersection reviewer needs ─────────────────────
+    def path_to_node(self, node_id: str, flow_type: str) -> list[str]:
+        """Reconstruct `flow_type`'s path from its seed to `node_id`.
+
+        Walks the `parent_node_id` pointers (the per-flow trace tree) upward and
+        returns the path seed → … → node_id. Empty if the flow never reached the
+        node. This is the data the façade-bypass check consumes: did the *other*
+        mainline pass through a node on this path, or jump straight to the inside?
+        """
+        rows = self._conn.execute(
+            """
+            WITH RECURSIVE path(node_id, parent_node_id, lvl) AS (
+                SELECT node_id, parent_node_id, 0 FROM traces
+                  WHERE node_id = :nid AND flow_type = :flow
+              UNION ALL
+                SELECT t.node_id, t.parent_node_id, p.lvl + 1
+                  FROM traces t JOIN path p ON t.node_id = p.parent_node_id
+                 WHERE t.flow_type = :flow
+            )
+            SELECT node_id FROM path ORDER BY lvl DESC
+            """,
+            {"nid": node_id, "flow": flow_type},
+        ).fetchall()
+        return [r["node_id"] for r in rows]
+
+    def flow_node_roles(self, flow_type: str) -> list[tuple[str, str]]:
+        """[(node_id, node_role), ...] for one mainline — used to find façade
+        candidates (the flow's own nodes that might wrap an internal one)."""
+        rows = self._conn.execute(
+            "SELECT node_id, node_role FROM traces WHERE flow_type = ? ORDER BY depth, id",
+            (flow_type,),
+        ).fetchall()
+        return [(r["node_id"], r["node_role"]) for r in rows]
+
+    def min_confidence(self, node_id: str) -> float:
+        """Lowest taint-decision confidence recorded for a node across all flows.
+
+        A recovered (dynamic-dispatch) edge already carries a ×0.8 discount, so a
+        low value here flags an evidentiarily weak crossing → downgrade to
+        'suspected' rather than hard-judging it."""
+        row = self._conn.execute(
+            "SELECT MIN(confidence) AS c FROM traces WHERE node_id = ?", (node_id,)
+        ).fetchone()
+        return float(row["c"]) if row and row["c"] is not None else 1.0
 
     @staticmethod
     def _row_to_node(row: sqlite3.Row) -> Node:

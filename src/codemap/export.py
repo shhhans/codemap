@@ -62,8 +62,11 @@ def export_subway_map(db_path: str | Path) -> dict[str, Any]:
         involved = [flow_to_line.get(f, f) for f in (x["flow_types"] or "").split(",") if f]
         intersections.append(
             {
+                # V2.1: verdict is ternary (healthy | dangerous | suspected). An
+                # un-reviewed crossing defaults to 'suspected' (黄) — undecided,
+                # not guilty — rather than the old hard 'dangerous'.
                 "node_id": x["node_id"],
-                "type": verdict["verdict"] if verdict else "dangerous",
+                "type": verdict["verdict"] if verdict else "suspected",
                 "description": verdict["description"] if verdict else "未定性的交叉点（评审 Agent 尚未运行）",
                 "involved_lines": involved,
             }
