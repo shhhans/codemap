@@ -68,8 +68,6 @@ class FakeGraph:
 
     async def query_graph(self, project: str, query: str, **_: object) -> dict:
         lits = re.findall(r"qualified_name:'([^']+)'", query)
-        if "community" in query:                       # caller_communities
-            return {"columns": ["k"], "rows": [[None]]}
         if "fan_in" in query:                          # _fan_in
             return {"columns": ["fan_in"], "rows": [[len(set(self._callers(lits[0])))]]}
         if "CALLS*1..3" in query:                      # _calls_reach

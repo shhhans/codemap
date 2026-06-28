@@ -92,7 +92,6 @@ Coordinator 在 `queue.join()` 收敛后唤醒评审。此时全局上下文齐�
 [门面证据] 在 auth 中找到节点 S=verify_token，静态图存在 S ─CALLS*1..3─> X，
           且 S ∉ billing 的路径   →「疑似绕行 (bypass)」证据  ← 指向 dangerous
 [全局扇入] X 被 N 个不同调用者引用（query_graph 统计 CALLS 入边）  ← N 高则指向 healthy（公共枢纽）
-[跨社区]  X 的调用者横跨 K 个 Leiden 社区（get_architecture）       ← K≥2 指向 healthy
 [完整方法体] <X 的 body>
 [置信度] 本交叉最低置信 = min(traces.confidence)；含 recovered(0.8) 边 → 偏低
 → LLM 输出: {verdict: healthy|dangerous|insufficient_context, description, [target_node_id]}
@@ -110,7 +109,12 @@ Coordinator 在 `queue.join()` 收敛后唤醒评审。此时全局上下文齐�
 2. **判 B 是否绕行**：门面 S 是否出现在 B 到 X 的路径（§2.3）上？
    `S ∉ path_B` → B 越过门面直取内部件 →「疑似绕行」证据。
 3. **关键：这只是证据，不是判决**。是否真污染由 LLM 结合扇入综合判：
-   高扇入 / 跨社区的节点即使被绕行，也可能是**公共枢纽**（健康复用）。
+   高扇入的节点即使被绕行，也可能是**公共枢纽**（健康复用）。
+
+> **引擎能力实测（v0.8.1）**：原设计还想用「调用者横跨多少个 Leiden 社区」作为公共枢纽
+> 的第二个信号，但实测引擎**不暴露 per-node 社区属性**（`f.community` 为空），`get_architecture`
+> 的 cluster 只给成员**计数**+5 个代表节点、没有完整成员表，无法把任意节点的调用者映射到社区。
+> 故**砍掉跨社区信号，公共枢纽判定仅依赖全局扇入**。若引擎日后提供可查询的社区属性再补。
 
 ### 3.4 三态决策与离线降级
 
@@ -118,7 +122,7 @@ Coordinator 在 `queue.join()` 收敛后唤醒评审。此时全局上下文齐�
 |---|---|---|---|---|
 | 有 | 是 | 低 | 正常 | 强 dangerous 证据 → **交 LLM 判**（多半 dangerous） |
 | 有 | 否（走正门） | — | — | 强 healthy 证据 → **交 LLM 判** |
-| 无 | — | 高 / 跨社区 | 正常 | 强 healthy 证据（公共枢纽） → **交 LLM 判** |
+| 无 | — | 高扇入 | 正常 | 强 healthy 证据（公共枢纽） → **交 LLM 判** |
 | 任意 | 任意 | — | 含 recovered/低置信 | **直接 suspected（黄）**，不交 LLM 硬判 |
 
 **铁律**：
@@ -181,7 +185,7 @@ V2.1 不是给公民体系补一个标签，而是改了它的宪法，必须在
 |---|---|---|
 | **S1 契约固化与中枢精炼** | 保留无锁 schema / asyncio 队列；加 `parent_node_id` + 路径 SQL；放开 `suspected`；纠正幻觉 API 命名；固化 `_downstream`/`_recover_dynamic` | §2 |
 | **S2 节食 Worker 纪律化** | 「绝不加载方法体」；低置信透传到 traces；父指针透传 | §2.1 |
-| **S3 延迟法官与拓扑反刍** | 重写 Reviewer：证据包组装（路径 + 门面绕行 + 扇入 + Leiden + 完整方法体 + 置信）、三态、有界反刍 + suspected 降级、导出/UI 三态化 | §3–4 |
+| **S3 延迟法官与拓扑反刍** | 重写 Reviewer：证据包组装（路径 + 门面绕行 + 扇入 + 完整方法体 + 置信）、三态、有界反刍 + suspected 降级、导出/UI 三态化 | §3–4 |
 
 ---
 
@@ -199,4 +203,4 @@ CALLS 边:  verify_token→parse_jwt,  charge→parse_jwt(绕行),
 预期三态结果：
 - `parse_jwt`：auth 门面 `verify_token` 被 billing 绕行 + 低扇入 → **dangerous**。
 - `get_current_user`：双线 sink，消费稳定状态 → **healthy**。
-- （狗粮）高扇入公共原语：被绕行但扇入高/跨社区 → **healthy**（公共枢纽），不再误报。
+- （狗粮）高扇入公共原语：被绕行但扇入高 → **healthy**（公共枢纽），不再误报。

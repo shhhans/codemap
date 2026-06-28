@@ -90,7 +90,6 @@ class Evidence:
     paths: dict[str, list[str]]             # flow -> [seed..X] node_ids
     bypasses: list[Bypass]
     fan_in: int
-    caller_communities: int
     min_confidence: float
     body: str
     incomplete: bool = False                # evidence-gathering hit a budget/error
@@ -150,17 +149,11 @@ class ReviewAgent:
         except Exception:  # noqa: BLE001
             fan_in, incomplete = -1, True
 
-        try:
-            communities = await self._caller_communities(node_id)
-        except Exception:  # noqa: BLE001 - best-effort; Leiden lookup may be absent
-            communities = -1
-
         body = await self._body(node_id)
         return Evidence(
             node_id=node_id, name=name, roles=roles, paths=paths, bypasses=bypasses,
-            fan_in=fan_in, caller_communities=communities,
-            min_confidence=self.blackboard.min_confidence(node_id), body=body,
-            incomplete=incomplete,
+            fan_in=fan_in, min_confidence=self.blackboard.min_confidence(node_id),
+            body=body, incomplete=incomplete,
         )
 
     async def _find_bypasses(self, node_id: str, roles: list[tuple[str, str]],
@@ -211,16 +204,13 @@ class ReviewAgent:
         rows = _rows(await self.mcp.query_graph(self.project, query=cypher))
         return int(rows[0].get("fan_in", 0)) if rows else 0
 
-    async def _caller_communities(self, node_id: str) -> int:
-        """How many distinct Leiden communities the node's callers span. A
-        cross-community fan-in is strong evidence of a public hub. Best-effort:
-        returns -1 if the engine doesn't expose a community property."""
-        cypher = (
-            f"MATCH (c)-[:CALLS]->(x {{qualified_name:'{node_id}'}}) "
-            "RETURN count(DISTINCT c.community) AS k"
-        )
-        rows = _rows(await self.mcp.query_graph(self.project, query=cypher))
-        return int(rows[0].get("k", -1)) if rows and rows[0].get("k") is not None else -1
+    # NOTE: a cross-community fan-in would be a strong public-hub signal, but
+    # codebase-memory-mcp v0.8.1 exposes Leiden communities only as get_architecture
+    # cluster summaries (member *counts* + 5 representatives) — there is no
+    # per-node community property and no full membership list, so an arbitrary
+    # node's callers can't be mapped to communities. We therefore lean on raw
+    # fan-in alone for the public-hub signal. Revisit if the engine adds a
+    # queryable community property.
 
     async def _body(self, node_id: str) -> str:
         try:
@@ -300,7 +290,6 @@ def _build_evidence_window(ev: Evidence, extra: str = "") -> str:
         by_lines = "  - （未发现门面绕行；各主线均经正常路径到达）"
 
     fanin = "未知" if ev.fan_in < 0 else str(ev.fan_in)
-    comm = "未知" if ev.caller_communities < 0 else str(ev.caller_communities)
     hub_hint = ""
     if ev.fan_in >= PUBLIC_HUB_FANIN:
         hub_hint = f"（扇入≥{PUBLIC_HUB_FANIN}，强烈指向公共枢纽 → healthy）"
@@ -314,7 +303,6 @@ def _build_evidence_window(ev: Evidence, extra: str = "") -> str:
         "[门面绕行证据 (指向 dangerous)]:",
         by_lines,
         f"[全局扇入 (指向 healthy/公共枢纽)]: {fanin} {hub_hint}",
-        f"[调用者横跨 Leiden 社区数]: {comm}",
         f"[本交叉最低置信度]: {ev.min_confidence:.2f}",
         "[节点源码]:",
         ev.body,

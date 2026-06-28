@@ -162,7 +162,7 @@ Agent 最终输出一张用于渲染"地铁图"的 JSON 地图。权威 JSON Sch
   processor 即判 dangerous」会把**设计上就该共享的工具节点**（`expand_one`/`_downstream` 等
   多驱动复用的核心原语）误报为职责污染。V2.1 把判定从「二元角色」升级为「关系判定」：
   新增 `traces.parent_node_id` 重建各主线到交叉点的路径，取证**门面绕行（越级摄取）** +
-  全局扇入/Leiden 社区，交由 LLM 做 **healthy / dangerous / suspected** 三态裁决（确定性逻辑
+  全局扇入，交由 LLM 做 **healthy / dangerous / suspected** 三态裁决（确定性逻辑
   只取证、绝不硬判 dangerous，离线/低置信降级 suspected）。实测：聚焦狗粮
   `_walk × _scheduler` 下共享原语 0 误报（expand_one/_classify 判 healthy、_downstream 判
   suspected），fixture 真污染 `parse_jwt` 仍正确标红。设计见

@@ -50,6 +50,28 @@
 
 ## 快速开始
 
+### 0. 安装底层图谱引擎 `Codebase-Memory`（单二进制，零依赖）
+
+所有结构化查询都经 MCP 打到这个引擎，必须先装好。它是公开项目
+[`DeusData/codebase-memory-mcp`](https://github.com/DeusData/codebase-memory-mcp)，
+从 GitHub Releases 下载对应平台的单二进制即可（**契约固化版本：v0.8.1**）。
+
+```bash
+# Linux x86_64（其他平台把 linux-amd64 换成 darwin-arm64 等）。portable 包静态链接、免依赖。
+ver=v0.8.1; asset=codebase-memory-mcp-linux-amd64-portable.tar.gz
+base=https://github.com/DeusData/codebase-memory-mcp/releases/download/$ver
+curl -fsSL -o cmem.tar.gz "$base/$asset"
+curl -fsSL -o checksums.txt "$base/checksums.txt"
+sha256sum -c <(grep "$asset" checksums.txt)        # 必须校验：Verifying… OK
+tar xzf cmem.tar.gz && install -m755 codebase-memory-mcp ~/.local/bin/
+
+# 验证 + 让 codemap 找到它（无参数即 stdio MCP server；也支持 `cli <tool> {json}` 单发调用）
+codebase-memory-mcp --version                       # → codebase-memory-mcp 0.8.1
+export CODEBASE_MEMORY_BIN=$(command -v codebase-memory-mcp)   # 或写进 .env
+```
+
+### 1+
+
 ```bash
 # 1. 安装（开发模式）
 pip install -e ".[dev]"
