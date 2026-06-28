@@ -53,7 +53,7 @@ function render(data) {
     ln.nodes.forEach(nid => { (nodeLines[nid] = nodeLines[nid] || new Set()).add(li); }));
 
   // ── Layout ──────────────────────────────────────────────────────────────
-  const topPad = 130, rowH = 110, labelW = 280, colGap = 460;
+  const topPad = 130, rowH = 150, labelW = 280, colGap = 460;
   const colX = data.mainlines.map((_, li) => labelW + 70 + li * colGap);
 
   // tentative per-line position (column x, row y)
@@ -103,12 +103,14 @@ function render(data) {
     if (lis.length > 1 && c) {
       const ps = lis.map(li => perLine[li + "|" + nid]);
       for (let k = 0; k < ps.length - 1; k++) {
-        const a = ps[k], b = ps[k + 1], mx = (a.x + b.x) / 2;
-        // a gently bowed dashed link so it reads as "outside" the rails
-        el("path", { d: `M ${a.x} ${a.y} Q ${mx} ${(a.y + b.y) / 2 - 34} ${b.x} ${b.y}`,
+        const a = ps[k], b = ps[k + 1], mx = (a.x + b.x) / 2, midY = (a.y + b.y) / 2;
+        // Bow the dashed link DOWNward and label it below, so it reads as
+        // "outside" the rails without colliding with the merged-station label
+        // hanging down from the row above.
+        el("path", { d: `M ${a.x} ${a.y} Q ${mx} ${midY + 34} ${b.x} ${b.y}`,
                      fill: "none", stroke: c.color, "stroke-width": 3.5,
                      "stroke-dasharray": "10 6", opacity: 0.95 }, svg);
-        el("text", { x: mx, y: (a.y + b.y) / 2 - 42, class: "badge", fill: c.color,
+        el("text", { x: mx, y: midY + 52, class: "badge", fill: c.color,
                      "text-anchor": "middle" }, svg, c.label);
       }
     }
@@ -173,22 +175,24 @@ function drawLabel(svg, p, node, nid, li, nLines, isMerged, verdict) {
   else if (li === 0 && nLines > 1) { x = p.x - 30; anchor = "end"; }
   else { x = p.x + 30; anchor = "start"; }
 
+  // Stack the label lines without overlap: name, type, file (optional), badge.
   el("text", { x, y: y0, class: "name", "text-anchor": anchor }, svg, node.name);
   el("text", { x, y: y0 + 16, class: "meta", "text-anchor": anchor, fill: "#9aa0aa" }, svg,
      TYPE_LABEL[node.type] || node.type);
+  let badgeY = y0 + 31;
   if (node.file_path) {
     el("text", { x, y: y0 + 31, class: "meta", "text-anchor": anchor, fill: "#6b7280" }, svg,
        node.file_path.replace(/^.*\/(src\/|fixtures\/)/, "$1"));
+    badgeY = y0 + 47;  // drop the badge below the file path so they never collide
   }
-  if (verdict === "dangerous") {
-    el("text", { x, y: y0 + 47, class: "badge", "text-anchor": anchor, fill: "#ff4d4f" }, svg,
-       "⚠ 危险换乘 · 职责污染");
-  } else if (verdict === "suspected") {
-    el("text", { x, y: y0 + 47, class: "badge", "text-anchor": anchor, fill: "#f0b400" }, svg,
-       "? 疑似换乘 · 待确认");
-  } else if (verdict === "healthy") {
-    el("text", { x, y: y0 + (isMerged ? 16 : 47), class: "badge", "text-anchor": anchor, fill: "#28c76f" }, svg,
-       "✓ 健康换乘");
+  const BADGE = {
+    dangerous: ["#ff4d4f", "⚠ 危险换乘 · 职责污染"],
+    suspected: ["#f0b400", "? 疑似换乘 · 待确认"],
+    healthy:   ["#28c76f", "✓ 健康换乘"],
+  };
+  if (BADGE[verdict]) {
+    el("text", { x, y: badgeY, class: "badge", "text-anchor": anchor, fill: BADGE[verdict][0] },
+       svg, BADGE[verdict][1]);
   }
 }
 
